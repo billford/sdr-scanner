@@ -7,7 +7,7 @@ Posting layer — three backends selectable via POST_BACKEND env var:
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
@@ -129,7 +129,7 @@ def _post_queue(incident: dict) -> str:
         except Exception:
             queue = []
     entry = {
-        "queued_at": datetime.utcnow().isoformat(),
+        "queued_at": datetime.now(timezone.utc).isoformat(),
         "summary": incident["summary"],
         "type": incident.get("type"),
         "location": incident.get("location"),

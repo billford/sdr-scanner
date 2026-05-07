@@ -1,7 +1,10 @@
 import sqlite3
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 from config import DB_PATH
 
 
@@ -50,7 +53,7 @@ def log_chunk(h: str, had_incident: bool):
     with get_conn() as conn:
         conn.execute(
             "INSERT OR IGNORE INTO chunks (captured_at, transcript_hash, had_incident) VALUES (?, ?, ?)",
-            (datetime.utcnow().isoformat(), h, int(had_incident)),
+            (_now(), h, int(had_incident)),
         )
 
 
@@ -62,7 +65,7 @@ def save_incident(incident: dict) -> int:
                (created_at, incident_time, incident_type, location, summary, raw_transcript, transcript_hash)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (
-                datetime.utcnow().isoformat(),
+                _now(),
                 incident.get("time"),
                 incident.get("type"),
                 incident.get("location"),
@@ -71,7 +74,7 @@ def save_incident(incident: dict) -> int:
                 incident["transcript_hash"],
             ),
         )
-        return cur.lastrowid
+        return cur.lastrowid or None
 
 
 def mark_posted(incident_id: int, post_id: str = ""):

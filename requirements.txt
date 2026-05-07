@@ -1,6 +1,9 @@
 anthropic>=0.40.0
 openai-whisper>=20231117
 requests>=2.31.0
+pytest>=9.0
+pytest-mock>=3.15
+
 # pydub is optional — used for more accurate silence detection if you want to swap in
 # pydub>=0.25.1
 # ffmpeg must be installed separately: brew install ffmpeg
