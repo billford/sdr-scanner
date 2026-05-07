@@ -10,7 +10,9 @@ if _env_file.exists():
             _k, _, _v = _line.partition("=")
             os.environ.setdefault(_k.strip(), _v.strip())
 
-BROADCASTIFY_FEED_URL = "https://broadcastify.cdnstream1.com/42700"
+COMMUNITY_NAME = os.getenv("COMMUNITY_NAME", "Chagrin Valley")
+COMMUNITY_DESC = os.getenv("COMMUNITY_DESC", "Chagrin Falls and surrounding Cuyahoga County communities")
+BROADCASTIFY_FEED_URL = os.getenv("BROADCASTIFY_FEED_URL", "https://broadcastify.cdnstream1.com/42700")
 CHUNK_DURATION_SECONDS = 60
 SILENCE_THRESHOLD_RMS = 500
 WHISPER_MODEL = "base.en"

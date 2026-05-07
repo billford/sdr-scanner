@@ -8,13 +8,13 @@ from typing import Optional
 
 import anthropic
 
-from config import ANTHROPIC_API_KEY, CLAUDE_MODEL
+from config import ANTHROPIC_API_KEY, CLAUDE_MODEL, COMMUNITY_DESC
 
 log = logging.getLogger(__name__)
 
 _POLISH_PROMPT = """\
 You are writing brief, factual posts for a local community scanner Facebook page \
-covering Chagrin Falls and surrounding Cuyahoga County communities.
+covering {community_desc}.
 
 Given this draft incident summary and the original dispatch transcript, write a \
 clean, Facebook-ready post.
@@ -60,7 +60,7 @@ def polish(incident: dict) -> dict:
         msg = client.messages.create(
             model=CLAUDE_MODEL,
             max_tokens=200,
-            system=_POLISH_PROMPT.format(time_now=time_now),
+            system=_POLISH_PROMPT.format(community_desc=COMMUNITY_DESC, time_now=time_now),
             messages=[{"role": "user", "content": user_content}],
         )
         polished_text = msg.content[0].text.strip()
