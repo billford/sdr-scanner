@@ -30,6 +30,13 @@ def tmp_queue(tmp_path, monkeypatch):
     return q
 
 
+@pytest.fixture
+def tmp_text(tmp_path, monkeypatch):
+    t = str(tmp_path / "incidents.txt")
+    monkeypatch.setattr(post, "TEXT_OUTPUT_FILE", t)
+    return t
+
+
 # ── queue backend ─────────────────────────────────────────────────────────────
 
 def test_post_queue_creates_file(incident, tmp_queue, monkeypatch):
@@ -65,6 +72,62 @@ def test_post_queue_entry_has_required_fields(incident, tmp_queue, monkeypatch):
     assert "summary" in entry
     assert "type" in entry
     assert "location" in entry
+
+
+# ── text backend ──────────────────────────────────────────────────────────────
+
+def test_post_text_creates_file(incident, tmp_text, monkeypatch):
+    monkeypatch.setattr(post, "POST_BACKEND", "text")
+    post.post_incident(incident)
+    assert Path(tmp_text).exists()
+
+
+def test_post_text_contains_summary(incident, tmp_text, monkeypatch):
+    monkeypatch.setattr(post, "POST_BACKEND", "text")
+    post.post_incident(incident)
+    content = Path(tmp_text).read_text()
+    assert incident["summary"] in content
+
+
+def test_post_text_contains_type_and_location(incident, tmp_text, monkeypatch):
+    monkeypatch.setattr(post, "POST_BACKEND", "text")
+    post.post_incident(incident)
+    content = Path(tmp_text).read_text()
+    assert "Structure Fire" in content
+    assert "123 Main Street" in content
+
+
+def test_post_text_contains_timestamp(incident, tmp_text, monkeypatch):
+    monkeypatch.setattr(post, "POST_BACKEND", "text")
+    post.post_incident(incident)
+    content = Path(tmp_text).read_text()
+    assert "[" in content  # timestamp bracket
+
+
+def test_post_text_appends_multiple(incident, tmp_text, monkeypatch):
+    monkeypatch.setattr(post, "POST_BACKEND", "text")
+    post.post_incident(incident)
+    incident2 = dict(incident, summary="[15:00] Accident — Route 82", type="Accident", location="Route 82")
+    post.post_incident(incident2)
+    content = Path(tmp_text).read_text()
+    assert incident["summary"] in content
+    assert incident2["summary"] in content
+
+
+def test_post_text_omits_missing_type(tmp_text, monkeypatch):
+    monkeypatch.setattr(post, "POST_BACKEND", "text")
+    inc = {"summary": "Unknown incident", "type": None, "location": None}
+    post.post_incident(inc)
+    content = Path(tmp_text).read_text()
+    assert "Type:" not in content
+    assert "Location:" not in content
+    assert "Unknown incident" in content
+
+
+def test_post_text_returns_empty_string(incident, tmp_text, monkeypatch):
+    monkeypatch.setattr(post, "POST_BACKEND", "text")
+    result = post.post_incident(incident)
+    assert result == ""
 
 
 # ── print backend ─────────────────────────────────────────────────────────────
