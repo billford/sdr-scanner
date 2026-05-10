@@ -23,6 +23,7 @@ FB_ACCESS_TOKEN = os.getenv("FB_ACCESS_TOKEN", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 DB_PATH = "incidents.db"
 QUEUE_FILE = "post_queue.json"
+TEXT_OUTPUT_FILE = os.getenv("TEXT_OUTPUT_FILE", "incidents.txt")
 
 # Local Ollama classifier
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")

@@ -1,7 +1,8 @@
 """
-Posting layer — three backends selectable via POST_BACKEND env var:
+Posting layer — four backends selectable via POST_BACKEND env var:
   queue    — write to local JSON queue file (default, safe for testing)
   facebook — post directly via Graph API
+  text     — append plain-text log to TEXT_OUTPUT_FILE (default: incidents.txt)
   print    — stdout only (debug)
 """
 import json
@@ -13,7 +14,7 @@ from pathlib import Path
 import requests
 
 from config import FB_ACCESS_TOKEN, FB_PAGE_ID
-from config import QUEUE_FILE  # module-level so tests can patch post.QUEUE_FILE
+from config import QUEUE_FILE, TEXT_OUTPUT_FILE  # module-level so tests can patch
 
 log = logging.getLogger(__name__)
 
@@ -29,6 +30,8 @@ def post_incident(incident: dict) -> str:
 
     if backend == "facebook":
         return _post_facebook(message)
+    elif backend == "text":
+        return _post_text(incident)
     elif backend == "print":
         print("\n" + "=" * 60)
         print(message)
@@ -118,6 +121,24 @@ def get_token_info() -> dict:
         }
     except Exception as exc:
         return {"valid": False, "error": str(exc)}
+
+
+def _post_text(incident: dict) -> str:
+    path = Path(TEXT_OUTPUT_FILE)
+    ts = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+    lines = [
+        f"[{ts}]",
+    ]
+    if incident.get("type"):
+        lines.append(f"Type: {incident['type']}")
+    if incident.get("location"):
+        lines.append(f"Location: {incident['location']}")
+    lines.append(incident["summary"])
+    lines.append("-" * 60)
+    with path.open("a") as f:
+        f.write("\n".join(lines) + "\n\n")
+    log.info("Wrote to text file: %s", incident["summary"][:80])
+    return ""
 
 
 def _post_queue(incident: dict) -> str:
