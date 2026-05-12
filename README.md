@@ -4,6 +4,37 @@ Automated pipeline: Broadcastify audio → Whisper STT → Ollama (local) → Cl
 
 Works with any Broadcastify feed. Configured by default for Chagrin Valley Dispatch.
 
+## Data flow
+
+```mermaid
+flowchart TD
+    A([Broadcastify Stream]) -->|MP3 audio| B[capture.py\n60s chunks]
+    B -->|raw bytes| C{Silent?}
+    C -->|yes| B
+    C -->|no| D[transcribe.py\nWhisper local]
+    D -->|transcript text| E{Seen before?\ndb.py}
+    E -->|yes - skip| B
+    E -->|no| F{keyword_check\nclassify.py}
+    F -->|no keywords| G[log + skip]
+    G --> B
+    F -->|keywords matched| H[local_classify\nOllama llama3.2]
+    H -->|NO_INCIDENT| G
+    H -->|INCIDENT| I[summarize.py\nClaude API]
+    I -->|polished summary| J[db.py\nSave incident]
+    J --> K{Cooldown OK?}
+    K -->|no| L[Saved, not posted]
+    K -->|yes| M[post.py]
+    M --> N([Zapier Webhook])
+    M --> O([incidents.txt])
+    M --> P([post_queue.json])
+    N -->|Zap routes to| Q([SMS / Email / Slack\netc.])
+
+    style A fill:#4a90d9,color:#fff
+    style Q fill:#27ae60,color:#fff
+    style I fill:#8e44ad,color:#fff
+    style H fill:#e67e22,color:#fff
+```
+
 ## Quick start
 
 ```bash
