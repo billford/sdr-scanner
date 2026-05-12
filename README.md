@@ -1,6 +1,6 @@
 # Scanner Page
 
-Automated pipeline: Broadcastify audio → Whisper STT → Ollama (local) → Claude polish → Facebook post queue.
+Automated pipeline: Broadcastify audio → Whisper STT → Ollama (local) → Claude polish → Zapier webhook.
 
 Works with any Broadcastify feed. Configured by default for Chagrin Valley Dispatch.
 
@@ -35,9 +35,9 @@ All settings live in `.env`. Copy `.env.example` to get started:
 | `ANTHROPIC_API_KEY` | — | Required for Claude polish step |
 | `OLLAMA_MODEL` | `llama3.2:3b` | Local model for incident classification |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama server address |
-| `POST_BACKEND` | `queue` | `queue`, `print`, or `facebook` |
-| `FB_PAGE_ID` | — | Facebook Page ID (facebook backend only) |
-| `FB_ACCESS_TOKEN` | — | Long-lived Page Access Token |
+| `POST_BACKEND` | `queue` | `queue`, `text`, `zapier`, or `print` |
+| `TEXT_OUTPUT_FILE` | `incidents.txt` | Output path for `text` backend |
+| `ZAPIER_WEBHOOK_URL` | — | Catch Hook URL for `zapier` backend |
 
 ### Finding your Broadcastify stream URL
 
@@ -68,8 +68,65 @@ stream → whisper (free, local)
 | `POST_BACKEND` | Behavior |
 |---|---|
 | `queue` (default) | Appends to `post_queue.json` for manual review |
+| `text` | Appends formatted entries to `incidents.txt` (or `TEXT_OUTPUT_FILE`) |
+| `zapier` | POSTs incident JSON to a Zapier Catch Hook URL |
 | `print` | Prints formatted post to stdout |
-| `facebook` | Posts via Graph API (requires `FB_PAGE_ID` + `FB_ACCESS_TOKEN`) |
+
+### Zapier setup
+
+1. In Zapier, create a new Zap → trigger: **Webhooks by Zapier → Catch Hook**
+2. Copy the webhook URL
+3. Set `ZAPIER_WEBHOOK_URL=<url>` in `.env`
+4. Set `POST_BACKEND=zapier`
+
+From there you can route to SMS, email, Slack, or anything else Zapier supports — no code changes needed.
+
+The payload sent to Zapier:
+
+```json
+{
+  "summary": "Structure Fire — 123 Main St — Engine 3 dispatched.",
+  "type": "Structure Fire",
+  "location": "123 Main St",
+  "time": "14:32",
+  "posted_at": "2026-05-12T14:32:00+00:00"
+}
+```
+
+## Running as a background service (macOS)
+
+The pipeline is designed to run continuously. Use launchd to keep it running automatically at login and restart it if it crashes.
+
+### Install
+
+```bash
+# Copy the plist to LaunchAgents
+cp com.billford.scanner.plist ~/Library/LaunchAgents/
+
+# Load and start it
+launchctl load ~/Library/LaunchAgents/com.billford.scanner.plist
+```
+
+### Common commands
+
+```bash
+# Check status (shows PID and last exit code)
+launchctl list | grep scanner
+
+# View live logs
+tail -f ~/sdr-broadcast/scanner-page/scanner.log
+
+# Stop
+launchctl stop com.billford.scanner
+
+# Start
+launchctl start com.billford.scanner
+
+# Remove completely (won't restart on login)
+launchctl unload ~/Library/LaunchAgents/com.billford.scanner.plist
+```
+
+Logs go to `scanner.log` in the project directory. The service auto-restarts with a 30-second throttle if it crashes repeatedly.
 
 ## Whisper backend
 
@@ -87,17 +144,9 @@ stream → whisper (free, local)
 | `transcribe.py` | Whisper transcription |
 | `classify.py` | Keyword pre-filter + Ollama local classification |
 | `summarize.py` | Claude API polish step |
-| `post.py` | Facebook / queue posting |
+| `post.py` | Zapier / text / queue posting |
 | `db.py` | SQLite incident log + dedup |
 | `config.py` | All configuration |
-
-## Facebook setup
-
-1. Create a Facebook Page
-2. Register a Developer App at developers.facebook.com
-3. Get a long-lived Page Access Token with `pages_manage_posts` permission
-4. Set `FB_PAGE_ID` and `FB_ACCESS_TOKEN` in `.env`
-5. Set `POST_BACKEND=facebook`
 
 ## Notes
 
