@@ -1,6 +1,6 @@
 """
 Claude polish step — only called when Ollama has already confirmed a real incident.
-Takes the local_summary from classify.py and produces a clean Facebook-ready post.
+Takes the local_summary from classify.py and produces a clean, post-ready summary.
 """
 import logging
 from datetime import datetime
@@ -13,11 +13,11 @@ from config import ANTHROPIC_API_KEY, CLAUDE_MODEL, COMMUNITY_DESC
 log = logging.getLogger(__name__)
 
 _POLISH_PROMPT = """\
-You are writing brief, factual posts for a local community scanner Facebook page \
+You are writing brief, factual posts for a local community scanner page \
 covering {community_desc}.
 
 Given this draft incident summary and the original dispatch transcript, write a \
-clean, Facebook-ready post.
+clean, concise post.
 
 Format: [HH:MM] [Incident type] — [Location] — [1–2 sentence description]
 
@@ -29,19 +29,19 @@ Rules:
 - If no time was mentioned use {time_now}
 - Return only the formatted post, no other text"""
 
-_client: Optional[anthropic.Anthropic] = None
+_CLIENT: Optional[anthropic.Anthropic] = None
 
 
 def _get_client() -> anthropic.Anthropic:
-    global _client
-    if _client is None:
-        _client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY or None)
-    return _client
+    global _CLIENT  # pylint: disable=global-statement
+    if _CLIENT is None:
+        _CLIENT = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY or None)
+    return _CLIENT
 
 
 def polish(incident: dict) -> dict:
     """
-    Refine a locally-classified incident into a polished Facebook post.
+    Refine a locally-classified incident into a polished post.
     Returns the incident dict with updated 'summary' field.
     Falls back to local_summary if API call fails.
     """
@@ -67,7 +67,7 @@ def polish(incident: dict) -> dict:
         incident = dict(incident)
         incident["summary"] = polished_text
         log.info("Polished: %s", polished_text[:120])
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         log.error("Claude polish failed: %s — using local summary", exc)
 
     return incident

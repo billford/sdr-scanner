@@ -11,6 +11,7 @@ import re
 import urllib.request
 import urllib.error
 
+import db
 from config import OLLAMA_MODEL, OLLAMA_URL
 
 log = logging.getLogger(__name__)
@@ -97,7 +98,7 @@ def local_classify(transcript: str) -> dict | None:
         with urllib.request.urlopen(req, timeout=30) as resp:
             result = json.loads(resp.read())
         response_text = result.get("response", "").strip()
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         log.error("Ollama classify error: %s", exc)
         return None
 
@@ -115,7 +116,6 @@ def local_classify(transcript: str) -> dict | None:
 
 
 def _parse_incident_line(line: str, raw_transcript: str) -> dict:
-    import db
     # Format: INCIDENT: <type> | <location> | <description>
     body = re.sub(r"^INCIDENT:\s*", "", line, flags=re.IGNORECASE).strip()
     parts = [p.strip() for p in body.split("|")]

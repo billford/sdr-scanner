@@ -1,7 +1,6 @@
 """
-Transcribes audio chunks via local whisper.cpp (preferred) or OpenAI Whisper API fallback.
+Transcribes audio chunks via local Whisper (preferred) or OpenAI Whisper API fallback.
 
-Local path uses the `whisper-cpp` Python binding or the `whisper` package.
 Set WHISPER_BACKEND = "local" or "openai" in config (defaults to "local").
 """
 import io
@@ -15,21 +14,21 @@ log = logging.getLogger(__name__)
 
 WHISPER_BACKEND = os.getenv("WHISPER_BACKEND", "local")
 
-_local_model = None
+_LOCAL_MODEL = None
 
 
 def _get_local_model():
-    global _local_model
-    if _local_model is None:
+    global _LOCAL_MODEL  # pylint: disable=global-statement
+    if _LOCAL_MODEL is None:
         try:
-            import whisper  # openai-whisper package
+            import whisper  # pylint: disable=import-outside-toplevel
             log.info("Loading local Whisper model: %s", WHISPER_MODEL)
-            _local_model = whisper.load_model(WHISPER_MODEL)
-        except ImportError:
+            _LOCAL_MODEL = whisper.load_model(WHISPER_MODEL)
+        except ImportError as exc:
             raise RuntimeError(
                 "openai-whisper not installed. Run: pip install openai-whisper"
-            )
-    return _local_model
+            ) from exc
+    return _LOCAL_MODEL
 
 
 def _transcribe_local(audio_bytes: bytes) -> str:
@@ -45,8 +44,7 @@ def _transcribe_local(audio_bytes: bytes) -> str:
 
 
 def _transcribe_openai(audio_bytes: bytes) -> str:
-    from openai import OpenAI
-
+    from openai import OpenAI  # pylint: disable=import-outside-toplevel,import-error
     client = OpenAI()
     audio_file = io.BytesIO(audio_bytes)
     audio_file.name = "chunk.mp3"
@@ -64,6 +62,6 @@ def transcribe(audio_bytes: bytes) -> str:
         if WHISPER_BACKEND == "openai":
             return _transcribe_openai(audio_bytes)
         return _transcribe_local(audio_bytes)
-    except Exception as exc:
+    except Exception as exc:  # pylint: disable=broad-exception-caught
         log.error("Transcription failed: %s", exc)
         return ""

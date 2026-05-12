@@ -24,13 +24,13 @@ logging.basicConfig(
 )
 log = logging.getLogger("main")
 
-_running = True
+_RUNNING = True
 
 
-def _handle_signal(sig, frame):
-    global _running
+def _handle_signal(_sig, _frame):
+    global _RUNNING  # pylint: disable=global-statement
     log.info("Shutting down…")
-    _running = False
+    _RUNNING = False
 
 
 def _cooldown_ok() -> bool:
@@ -39,6 +39,7 @@ def _cooldown_ok() -> bool:
 
 
 def main():
+    """Run the scanner pipeline until interrupted."""
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
 
@@ -47,7 +48,7 @@ def main():
 
     chunk_count = 0
     for audio_chunk in capture.stream_chunks():
-        if not _running:
+        if not _RUNNING:
             break
 
         chunk_count += 1

@@ -54,7 +54,7 @@ def stream_chunks(url: str = BROADCASTIFY_FEED_URL) -> Iterator[bytes]:
                     chunk = buf.getvalue()
                     buf = io.BytesIO()
                     yield chunk
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-exception-caught
             log.warning("Stream error (%s), reconnecting in 5s…", exc)
             time.sleep(5)
 
@@ -64,7 +64,7 @@ def rms_level(audio_bytes: bytes) -> float:
     try:
         samples = np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32)
         return float(np.sqrt(np.mean(samples ** 2)))
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         return 0.0
 
 

@@ -1,3 +1,4 @@
+"""Central configuration — reads from environment and .env file."""
 import os
 from pathlib import Path
 
@@ -11,18 +12,23 @@ if _env_file.exists():
             os.environ.setdefault(_k.strip(), _v.strip())
 
 COMMUNITY_NAME = os.getenv("COMMUNITY_NAME", "Chagrin Valley")
-COMMUNITY_DESC = os.getenv("COMMUNITY_DESC", "Chagrin Falls and surrounding Cuyahoga County communities")
-BROADCASTIFY_FEED_URL = os.getenv("BROADCASTIFY_FEED_URL", "https://broadcastify.cdnstream1.com/42700")
+COMMUNITY_DESC = os.getenv(
+    "COMMUNITY_DESC",
+    "Chagrin Falls and surrounding Cuyahoga County communities",
+)
+BROADCASTIFY_FEED_URL = os.getenv(
+    "BROADCASTIFY_FEED_URL", "https://broadcastify.cdnstream1.com/42700"
+)
 CHUNK_DURATION_SECONDS = 60
 SILENCE_THRESHOLD_RMS = 500
 WHISPER_MODEL = "base.en"
 CLAUDE_MODEL = "claude-sonnet-4-6"
 POST_COOLDOWN_MINUTES = 5
-ZAPIER_WEBHOOK_URL = os.getenv("ZAPIER_WEBHOOK_URL", "")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 DB_PATH = "incidents.db"
 QUEUE_FILE = "post_queue.json"
 TEXT_OUTPUT_FILE = os.getenv("TEXT_OUTPUT_FILE", "incidents.txt")
+ZAPIER_WEBHOOK_URL = os.getenv("ZAPIER_WEBHOOK_URL", "")
 
 # Local Ollama classifier
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")

@@ -27,15 +27,14 @@ def post_incident(incident: dict) -> str:
 
     if backend == "zapier":
         return _post_zapier(incident)
-    elif backend == "text":
+    if backend == "text":
         return _post_text(incident)
-    elif backend == "print":
+    if backend == "print":
         print("\n" + "=" * 60)
         print(incident["summary"])
         print("=" * 60 + "\n")
         return ""
-    else:
-        return _post_queue(incident)
+    return _post_queue(incident)
 
 
 def _post_zapier(incident: dict) -> str:
@@ -72,7 +71,7 @@ def _post_text(incident: dict) -> str:
         lines.append(f"Location: {incident['location']}")
     lines.append(incident["summary"])
     lines.append("-" * 60)
-    with path.open("a") as f:
+    with path.open("a", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n\n")
     log.info("Wrote to text file: %s", incident["summary"][:80])
     return ""
@@ -83,8 +82,8 @@ def _post_queue(incident: dict) -> str:
     queue = []
     if path.exists():
         try:
-            queue = json.loads(path.read_text())
-        except Exception:
+            queue = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:  # pylint: disable=broad-exception-caught
             queue = []
     entry = {
         "queued_at": datetime.now(timezone.utc).isoformat(),
@@ -94,6 +93,6 @@ def _post_queue(incident: dict) -> str:
         "time": incident.get("time"),
     }
     queue.append(entry)
-    path.write_text(json.dumps(queue, indent=2))
+    path.write_text(json.dumps(queue, indent=2), encoding="utf-8")
     log.info("Queued post: %s", entry["summary"][:80])
     return ""

@@ -27,14 +27,14 @@ def test_polish_updates_summary(tmp_db, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     import summarize, config
     monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "sk-ant-test")
-    summarize._client = None
+    summarize._CLIENT = None
 
     polished_text = "[14:32] Structure Fire — 123 Main Street — Engine 3 responded to a working fire."
     mock_client = MagicMock()
     mock_client.messages.create.return_value = _mock_claude_response(polished_text)
 
     with patch("summarize.anthropic.Anthropic", return_value=mock_client):
-        summarize._client = None
+        summarize._CLIENT = None
         result = summarize.polish(_make_incident())
 
     assert result["summary"] == polished_text
@@ -44,7 +44,7 @@ def test_polish_updates_summary(tmp_db, monkeypatch):
 def test_polish_no_api_key_returns_unchanged(tmp_db, monkeypatch):
     import summarize
     monkeypatch.setattr(summarize, "ANTHROPIC_API_KEY", "")
-    summarize._client = None
+    summarize._CLIENT = None
 
     incident = _make_incident()
     result = summarize.polish(incident)
@@ -60,7 +60,7 @@ def test_polish_api_error_falls_back_to_local(tmp_db, monkeypatch):
     mock_client.messages.create.side_effect = Exception("API timeout")
 
     with patch("summarize.anthropic.Anthropic", return_value=mock_client):
-        summarize._client = None
+        summarize._CLIENT = None
         incident = _make_incident()
         result = summarize.polish(incident)
 
@@ -77,7 +77,7 @@ def test_polish_does_not_mutate_original(tmp_db, monkeypatch):
     mock_client.messages.create.return_value = _mock_claude_response("Polished version")
 
     with patch("summarize.anthropic.Anthropic", return_value=mock_client):
-        summarize._client = None
+        summarize._CLIENT = None
         incident = _make_incident()
         original_summary = incident["summary"]
         result = summarize.polish(incident)
