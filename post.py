@@ -1,9 +1,9 @@
 """
-Posting layer — four backends selectable via POST_BACKEND env var:
-  queue    — write to local JSON queue file (default, safe for testing)
-  facebook — post directly via Graph API
-  text     — append plain-text log to TEXT_OUTPUT_FILE (default: incidents.txt)
-  print    — stdout only (debug)
+Posting layer — three backends selectable via POST_BACKEND env var:
+  queue   — write to local JSON queue file (default, safe for testing)
+  text    — append plain-text log to TEXT_OUTPUT_FILE (default: incidents.txt)
+  zapier  — POST incident JSON to a Zapier Catch Hook webhook URL
+  print   — stdout only (debug)
 """
 import json
 import logging
@@ -13,114 +13,51 @@ from pathlib import Path
 
 import requests
 
-from config import FB_ACCESS_TOKEN, FB_PAGE_ID
+from config import ZAPIER_WEBHOOK_URL
 from config import QUEUE_FILE, TEXT_OUTPUT_FILE  # module-level so tests can patch
 
 log = logging.getLogger(__name__)
 
 POST_BACKEND = os.getenv("POST_BACKEND", "queue")
-GRAPH_VERSION = "v19.0"
-GRAPH_BASE = f"https://graph.facebook.com/{GRAPH_VERSION}"
 
 
 def post_incident(incident: dict) -> str:
-    """Post incident; returns post_id string (or empty on queue/print)."""
-    message = incident["summary"]
+    """Post incident; returns post_id string (or empty on queue/text/print)."""
     backend = POST_BACKEND.lower()
 
-    if backend == "facebook":
-        return _post_facebook(message)
+    if backend == "zapier":
+        return _post_zapier(incident)
     elif backend == "text":
         return _post_text(incident)
     elif backend == "print":
         print("\n" + "=" * 60)
-        print(message)
+        print(incident["summary"])
         print("=" * 60 + "\n")
         return ""
     else:
         return _post_queue(incident)
 
 
-def _post_facebook(message: str) -> str:
-    if not FB_PAGE_ID or not FB_ACCESS_TOKEN:
-        log.error("FB_PAGE_ID and FB_ACCESS_TOKEN must be set for facebook backend")
+def _post_zapier(incident: dict) -> str:
+    if not ZAPIER_WEBHOOK_URL:
+        log.error("ZAPIER_WEBHOOK_URL must be set for zapier backend")
         return ""
 
+    payload = {
+        "summary": incident["summary"],
+        "type": incident.get("type"),
+        "location": incident.get("location"),
+        "time": incident.get("time"),
+        "posted_at": datetime.now(timezone.utc).isoformat(),
+    }
     try:
-        resp = requests.post(
-            f"{GRAPH_BASE}/{FB_PAGE_ID}/feed",
-            json={"message": message, "access_token": FB_ACCESS_TOKEN},
-            timeout=15,
-        )
-        _check_graph_error(resp)
-        post_id = resp.json().get("id", "")
-        log.info("Posted to Facebook: %s", post_id)
-        return post_id
-    except FacebookTokenError:
-        log.error("Facebook token is invalid or expired — run: python check_token.py")
-        raise
-    except requests.RequestException as exc:
-        log.error("Facebook post failed (network): %s", exc)
-        raise
-
-
-def _check_graph_error(resp: requests.Response):
-    """Raise a typed exception for known Graph API error codes."""
-    if resp.ok:
-        return
-    try:
-        err = resp.json().get("error", {})
-    except Exception:
+        resp = requests.post(ZAPIER_WEBHOOK_URL, json=payload, timeout=15)
         resp.raise_for_status()
-        return
-
-    code = err.get("code")
-    message = err.get("message", "unknown error")
-
-    # Token errors: 190 (invalid/expired), 102 (session expired)
-    if code in (102, 190):
-        raise FacebookTokenError(f"Token error ({code}): {message}")
-
-    # Permission errors
-    if code == 200:
-        raise FacebookPermissionError(f"Permission denied ({code}): {message}")
-
-    resp.raise_for_status()
-
-
-class FacebookTokenError(Exception):
-    pass
-
-
-class FacebookPermissionError(Exception):
-    pass
-
-
-def get_token_info() -> dict:
-    """
-    Inspect the current access token via the Graph debug endpoint.
-    Returns dict with keys: valid, expires_at, scopes, error.
-    """
-    if not FB_ACCESS_TOKEN:
-        return {"valid": False, "error": "FB_ACCESS_TOKEN not set"}
-
-    try:
-        resp = requests.get(
-            f"{GRAPH_BASE}/debug_token",
-            params={"input_token": FB_ACCESS_TOKEN, "access_token": FB_ACCESS_TOKEN},
-            timeout=10,
-        )
-        data = resp.json().get("data", {})
-        expires_at = data.get("expires_at")
-        return {
-            "valid": data.get("is_valid", False),
-            "expires_at": datetime.fromtimestamp(expires_at).isoformat() if expires_at else "never",
-            "scopes": data.get("scopes", []),
-            "app_id": data.get("app_id"),
-            "error": data.get("error", {}).get("message"),
-        }
-    except Exception as exc:
-        return {"valid": False, "error": str(exc)}
+        log.info("Sent to Zapier webhook: %s", incident["summary"][:80])
+        return ""
+    except requests.RequestException as exc:
+        log.error("Zapier webhook failed: %s", exc)
+        raise
 
 
 def _post_text(incident: dict) -> str:

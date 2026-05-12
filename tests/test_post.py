@@ -1,12 +1,9 @@
 import json
-import os
-import tempfile
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import post
-from post import FacebookTokenError, FacebookPermissionError, get_token_info, _check_graph_error
 
 
 @pytest.fixture
@@ -130,6 +127,55 @@ def test_post_text_returns_empty_string(incident, tmp_text, monkeypatch):
     assert result == ""
 
 
+# ── zapier backend ────────────────────────────────────────────────────────────
+
+def test_post_zapier_success(incident, monkeypatch):
+    monkeypatch.setattr(post, "POST_BACKEND", "zapier")
+    monkeypatch.setattr(post, "ZAPIER_WEBHOOK_URL", "https://hooks.zapier.com/fake/123")
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+
+    with patch("post.requests.post", return_value=mock_resp) as mock_post:
+        result = post.post_incident(incident)
+
+    assert result == ""
+    mock_post.assert_called_once()
+    payload = mock_post.call_args.kwargs["json"]
+    assert payload["summary"] == incident["summary"]
+    assert payload["type"] == incident["type"]
+    assert payload["location"] == incident["location"]
+    assert "posted_at" in payload
+
+
+def test_post_zapier_missing_url(incident, monkeypatch):
+    monkeypatch.setattr(post, "POST_BACKEND", "zapier")
+    monkeypatch.setattr(post, "ZAPIER_WEBHOOK_URL", "")
+    result = post.post_incident(incident)
+    assert result == ""
+
+
+def test_post_zapier_network_error_raises(incident, monkeypatch):
+    monkeypatch.setattr(post, "POST_BACKEND", "zapier")
+    monkeypatch.setattr(post, "ZAPIER_WEBHOOK_URL", "https://hooks.zapier.com/fake/123")
+
+    with patch("post.requests.post", side_effect=ConnectionError("Network error")):
+        with pytest.raises(ConnectionError):
+            post.post_incident(incident)
+
+
+def test_post_zapier_http_error_raises(incident, monkeypatch):
+    monkeypatch.setattr(post, "POST_BACKEND", "zapier")
+    monkeypatch.setattr(post, "ZAPIER_WEBHOOK_URL", "https://hooks.zapier.com/fake/123")
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.side_effect = Exception("HTTP 400")
+
+    with patch("post.requests.post", return_value=mock_resp):
+        with pytest.raises(Exception, match="HTTP 400"):
+            post.post_incident(incident)
+
+
 # ── print backend ─────────────────────────────────────────────────────────────
 
 def test_post_print_outputs_summary(incident, monkeypatch, capsys):
@@ -137,133 +183,3 @@ def test_post_print_outputs_summary(incident, monkeypatch, capsys):
     post.post_incident(incident)
     captured = capsys.readouterr()
     assert incident["summary"] in captured.out
-
-
-# ── facebook backend ──────────────────────────────────────────────────────────
-
-def test_post_facebook_success(incident, monkeypatch):
-    monkeypatch.setattr(post, "POST_BACKEND", "facebook")
-    monkeypatch.setattr(post, "FB_PAGE_ID", "123456789")
-    monkeypatch.setattr(post, "FB_ACCESS_TOKEN", "fake-token")
-
-    mock_resp = MagicMock()
-    mock_resp.ok = True
-    mock_resp.json.return_value = {"id": "123456789_987654321"}
-
-    with patch("post.requests.post", return_value=mock_resp):
-        result = post.post_incident(incident)
-
-    assert result == "123456789_987654321"
-
-
-def test_post_facebook_missing_credentials(incident, monkeypatch):
-    monkeypatch.setattr(post, "POST_BACKEND", "facebook")
-    monkeypatch.setattr(post, "FB_PAGE_ID", "")
-    monkeypatch.setattr(post, "FB_ACCESS_TOKEN", "")
-    result = post._post_facebook(incident["summary"])
-    assert result == ""
-
-
-def test_post_facebook_token_error_raises(incident, monkeypatch):
-    monkeypatch.setattr(post, "FB_PAGE_ID", "123")
-    monkeypatch.setattr(post, "FB_ACCESS_TOKEN", "expired-token")
-
-    mock_resp = MagicMock()
-    mock_resp.ok = False
-    mock_resp.json.return_value = {"error": {"code": 190, "message": "Token expired"}}
-
-    with patch("post.requests.post", return_value=mock_resp):
-        with pytest.raises(FacebookTokenError):
-            post._post_facebook(incident["summary"])
-
-
-def test_post_facebook_permission_error_raises(incident, monkeypatch):
-    monkeypatch.setattr(post, "FB_PAGE_ID", "123")
-    monkeypatch.setattr(post, "FB_ACCESS_TOKEN", "no-perms-token")
-
-    mock_resp = MagicMock()
-    mock_resp.ok = False
-    mock_resp.json.return_value = {"error": {"code": 200, "message": "Permission denied"}}
-
-    with patch("post.requests.post", return_value=mock_resp):
-        with pytest.raises(FacebookPermissionError):
-            post._post_facebook(incident["summary"])
-
-
-# ── _check_graph_error ────────────────────────────────────────────────────────
-
-def test_check_graph_error_ok():
-    mock_resp = MagicMock()
-    mock_resp.ok = True
-    _check_graph_error(mock_resp)  # should not raise
-
-
-def test_check_graph_error_190():
-    mock_resp = MagicMock()
-    mock_resp.ok = False
-    mock_resp.json.return_value = {"error": {"code": 190, "message": "Invalid token"}}
-    with pytest.raises(FacebookTokenError):
-        _check_graph_error(mock_resp)
-
-
-def test_check_graph_error_102():
-    mock_resp = MagicMock()
-    mock_resp.ok = False
-    mock_resp.json.return_value = {"error": {"code": 102, "message": "Session expired"}}
-    with pytest.raises(FacebookTokenError):
-        _check_graph_error(mock_resp)
-
-
-def test_check_graph_error_200():
-    mock_resp = MagicMock()
-    mock_resp.ok = False
-    mock_resp.json.return_value = {"error": {"code": 200, "message": "Permission denied"}}
-    with pytest.raises(FacebookPermissionError):
-        _check_graph_error(mock_resp)
-
-
-def test_check_graph_error_unknown_raises_http():
-    mock_resp = MagicMock()
-    mock_resp.ok = False
-    mock_resp.json.return_value = {"error": {"code": 999, "message": "Unknown"}}
-    mock_resp.raise_for_status.side_effect = Exception("HTTP 500")
-    with pytest.raises(Exception, match="HTTP 500"):
-        _check_graph_error(mock_resp)
-
-
-# ── get_token_info ────────────────────────────────────────────────────────────
-
-def test_get_token_info_no_token(monkeypatch):
-    monkeypatch.setattr(post, "FB_ACCESS_TOKEN", "")
-    result = get_token_info()
-    assert result["valid"] is False
-    assert "not set" in result["error"]
-
-
-def test_get_token_info_valid(monkeypatch):
-    monkeypatch.setattr(post, "FB_ACCESS_TOKEN", "fake-token")
-
-    mock_resp = MagicMock()
-    mock_resp.json.return_value = {
-        "data": {
-            "is_valid": True,
-            "expires_at": 9999999999,
-            "scopes": ["pages_manage_posts", "pages_read_engagement"],
-            "app_id": "123",
-        }
-    }
-
-    with patch("post.requests.get", return_value=mock_resp):
-        result = get_token_info()
-
-    assert result["valid"] is True
-    assert "pages_manage_posts" in result["scopes"]
-    assert result["app_id"] == "123"
-
-
-def test_get_token_info_request_failure(monkeypatch):
-    monkeypatch.setattr(post, "FB_ACCESS_TOKEN", "fake-token")
-    with patch("post.requests.get", side_effect=ConnectionError("Network error")):
-        result = get_token_info()
-    assert result["valid"] is False
-    assert "Network error" in result["error"]
