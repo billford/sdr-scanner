@@ -1,6 +1,7 @@
 """SQLite persistence — incident log and chunk dedup."""
 import hashlib
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 from config import DB_PATH
@@ -10,11 +11,19 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+@contextmanager
 def get_conn():
-    """Open and return a DB connection with Row factory."""
+    """Context manager: open, yield, commit/rollback, and always close."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def init_db():
