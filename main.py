@@ -33,9 +33,12 @@ def _handle_signal(_sig, _frame):
     _RUNNING = False
 
 
-def _cooldown_ok() -> bool:
+def _cooldown_ok(incident_type: str | None) -> bool:
     recent = db.recent_incidents(minutes=POST_COOLDOWN_MINUTES)
-    return not any(r["posted"] for r in recent)
+    return not any(
+        r["posted"] and r["incident_type"] == incident_type
+        for r in recent
+    )
 
 
 def main():
@@ -93,7 +96,7 @@ def main():
             log.info("Duplicate incident in DB.")
             continue
 
-        if _cooldown_ok():
+        if _cooldown_ok(incident.get("type")):
             post_id = post.post_incident(incident)
             db.mark_posted(incident_id, post_id)
         else:
