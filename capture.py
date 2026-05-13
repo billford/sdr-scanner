@@ -45,15 +45,15 @@ def stream_chunks(url: str = BROADCASTIFY_FEED_URL) -> Iterator[bytes]:
     while True:
         try:
             log.info("Connecting to stream: %s", url)
-            resp = _open_stream(url)
-            for raw in resp.iter_content(chunk_size=STREAM_CHUNK_BYTES):
-                if not raw:
-                    continue
-                buf.write(raw)
-                if buf.tell() >= target_bytes:
-                    chunk = buf.getvalue()
-                    buf = io.BytesIO()
-                    yield chunk
+            with _open_stream(url) as resp:
+                for raw in resp.iter_content(chunk_size=STREAM_CHUNK_BYTES):
+                    if not raw:
+                        continue
+                    buf.write(raw)
+                    if buf.tell() >= target_bytes:
+                        chunk = buf.getvalue()
+                        buf = io.BytesIO()
+                        yield chunk
         except Exception as exc:  # pylint: disable=broad-exception-caught
             log.warning("Stream error (%s), reconnecting in 5s…", exc)
             time.sleep(5)
