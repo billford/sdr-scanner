@@ -85,10 +85,6 @@ def main():
 
         log.info("Ollama confirmed incident: %s", incident.get("local_summary", "")[:80])
 
-        if db.chunk_seen(incident["transcript_hash"]):
-            log.info("Already logged this incident.")
-            continue
-
         # Stage 3: Claude polish (API — only hits here on real incidents)
         incident = summarize.polish(incident)
 
