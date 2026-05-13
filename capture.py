@@ -3,6 +3,8 @@ Captures a rolling stream from Broadcastify and yields fixed-duration audio chun
 as raw bytes (MP3 frames). Handles reconnects transparently.
 """
 import io
+import queue
+import threading
 import time
 import logging
 from typing import Iterator
@@ -57,6 +59,26 @@ def stream_chunks(url: str = BROADCASTIFY_FEED_URL) -> Iterator[bytes]:
         except Exception as exc:  # pylint: disable=broad-exception-caught
             log.warning("Stream error (%s), reconnecting in 5s…", exc)
             time.sleep(5)
+
+
+def stream_chunks_multi(urls: list[str]) -> Iterator[bytes]:
+    """Merges chunks from multiple Broadcastify feeds into one stream."""
+    if len(urls) == 1:
+        yield from stream_chunks(urls[0])
+        return
+
+    q: queue.Queue[bytes] = queue.Queue(maxsize=32)
+
+    def _feed(url: str) -> None:
+        for chunk in stream_chunks(url):
+            q.put(chunk)
+
+    for url in urls:
+        t = threading.Thread(target=_feed, args=(url,), daemon=True)
+        t.start()
+
+    while True:
+        yield q.get()
 
 
 def rms_level(audio_bytes: bytes) -> float:

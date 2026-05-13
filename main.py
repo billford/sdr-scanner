@@ -15,7 +15,7 @@ import transcribe
 import classify
 import summarize
 import post
-from config import POST_COOLDOWN_MINUTES
+from config import POST_COOLDOWN_MINUTES, BROADCASTIFY_FEED_URLS
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,10 +44,10 @@ def main():
     signal.signal(signal.SIGTERM, _handle_signal)
 
     db.init_db()
-    log.info("Scanner monitor started. Backend: %s", post.POST_BACKEND)
+    log.info("Scanner monitor started. Backend: %s | Feeds: %s", post.POST_BACKEND, BROADCASTIFY_FEED_URLS)
 
     chunk_count = 0
-    for audio_chunk in capture.stream_chunks():
+    for audio_chunk in capture.stream_chunks_multi(BROADCASTIFY_FEED_URLS):
         if not _RUNNING:
             break
 
