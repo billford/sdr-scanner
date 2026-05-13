@@ -23,6 +23,8 @@ _INCIDENT_PATTERNS = re.compile(
     # Fire
     r"structure fire|working fire|house fire|car fire|vehicle fire|brush fire|"
     r"fire at|fire on|reported fire|smoke showing|flames|"
+    r"box alarm|still alarm|second alarm|third alarm|alarm box|"
+    r"rescue company|ladder company|"
     # Medical
     r"medical|ems|cardiac|unconscious|not breathing|difficulty breath|"
     r"overdose|trauma|chest pain|fall victim|seizure|unresponsive|"
