@@ -19,19 +19,19 @@ def update_stream_status(url: str, status: str) -> None:
         data = {}
         if STREAM_STATUS_FILE.exists():
             try:
-                data = json.loads(STREAM_STATUS_FILE.read_text())
-            except Exception:
+                data = json.loads(STREAM_STATUS_FILE.read_text(encoding="utf-8"))
+            except Exception:  # pylint: disable=broad-exception-caught
                 pass
         data[url] = {"status": status, "since": datetime.now(timezone.utc).isoformat()}
-        STREAM_STATUS_FILE.write_text(json.dumps(data, indent=2))
+        STREAM_STATUS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
 def _load_stream_status() -> dict:
     with _status_lock:
         if STREAM_STATUS_FILE.exists():
             try:
-                return json.loads(STREAM_STATUS_FILE.read_text())
-            except Exception:
+                return json.loads(STREAM_STATUS_FILE.read_text(encoding="utf-8"))
+            except Exception:  # pylint: disable=broad-exception-caught
                 pass
     return {}
 
@@ -43,7 +43,7 @@ def _feed_label(url: str) -> str:
 def _fmt_time(iso: str, fmt: str = "%H:%M %b %d") -> str:
     try:
         return datetime.fromisoformat(iso).astimezone().strftime(fmt)
-    except Exception:
+    except Exception:  # pylint: disable=broad-exception-caught
         return iso
 
 
@@ -107,6 +107,7 @@ def generate() -> None:
 
     updated = now.strftime("%H:%M:%S %Z, %b %d %Y")
 
+    # pylint: disable=line-too-long
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>

@@ -97,7 +97,7 @@ def local_classify(transcript: str) -> dict | None:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310 — localhost Ollama only
             result = json.loads(resp.read())
         response_text = result.get("response", "").strip()
     except Exception as exc:  # pylint: disable=broad-exception-caught

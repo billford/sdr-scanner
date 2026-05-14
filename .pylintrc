@@ -1,0 +1,17 @@
+[MAIN]
+ignore=.venv
+
+[FORMAT]
+max-line-length=120
+
+[MESSAGES CONTROL]
+# Disabled globally:
+#   duplicate-code     — false positives on shared test fixtures
+#   too-many-locals    — acceptable in HTML-generating functions
+disable=duplicate-code,too-many-locals
+
+[DESIGN]
+max-locals=20
+
+[SIMILARITIES]
+min-similarity-lines=8

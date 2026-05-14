@@ -12,7 +12,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 def tmp_db(monkeypatch):
     """Isolated SQLite DB for each test."""
     import db, config
-    tmp = tempfile.mktemp(suffix=".db")
+    fd, tmp = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
     monkeypatch.setattr(config, "DB_PATH", tmp)
     monkeypatch.setattr(db, "DB_PATH", tmp)
     db.init_db()

@@ -29,7 +29,8 @@ def info(msg):    print(f"{INFO}  {msg}")
 
 def test_db():
     import db, config
-    tmp = tempfile.mktemp(suffix=".db")
+    fd, tmp = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
     config.DB_PATH = db.DB_PATH = tmp
     try:
         db.init_db()
@@ -143,7 +144,7 @@ def test_ollama():
 
     # Check Ollama is reachable
     try:
-        urllib.request.urlopen(f"{OLLAMA_URL}/api/tags", timeout=3)
+        urllib.request.urlopen(f"{OLLAMA_URL}/api/tags", timeout=3)  # nosec B310 — localhost Ollama only
     except Exception as e:
         fail("Ollama", f"not reachable at {OLLAMA_URL}: {e}")
 
@@ -173,7 +174,8 @@ def test_polish():
         fail("Claude polish", "ANTHROPIC_API_KEY not set")
 
     import db, config
-    tmp = tempfile.mktemp(suffix=".db")
+    fd, tmp = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
     config.DB_PATH = db.DB_PATH = tmp
     db.init_db()
 
@@ -203,7 +205,8 @@ def test_polish():
 
 def test_post_queue():
     import post, config
-    tmp_queue = tempfile.mktemp(suffix=".json")
+    fd, tmp_queue = tempfile.mkstemp(suffix=".json")
+    os.close(fd)
     original_q_cfg, original_q_post = config.QUEUE_FILE, post.QUEUE_FILE
     original_backend = post.POST_BACKEND
     config.QUEUE_FILE = post.QUEUE_FILE = tmp_queue
