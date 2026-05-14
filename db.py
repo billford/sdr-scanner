@@ -105,6 +105,15 @@ def mark_posted(incident_id: int, post_id: str = ""):
         )
 
 
+def unposted_incidents() -> list:
+    """Return all incidents saved but not yet posted, oldest first."""
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM incidents WHERE posted = 0 ORDER BY created_at ASC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def recent_incidents(minutes: int = 30) -> list:
     """Return incidents created within the last N minutes."""
     with get_conn() as conn:

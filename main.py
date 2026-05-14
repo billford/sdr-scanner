@@ -41,6 +41,21 @@ def _cooldown_ok(incident_type: str | None) -> bool:
     )
 
 
+def _flush_unposted() -> None:
+    """Post any incidents that were held back by cooldown and are now clear."""
+    for row in db.unposted_incidents():
+        if _cooldown_ok(row.get("incident_type")):
+            log.info("Cooldown cleared — posting held incident #%d: %s", row["id"], row["summary"][:80])
+            incident = {
+                "summary": row["summary"],
+                "type": row["incident_type"],
+                "location": row["location"],
+                "time": row["incident_time"],
+            }
+            post_id = post.post_incident(incident)
+            db.mark_posted(row["id"], post_id)
+
+
 def main():
     """Run the scanner pipeline until interrupted."""
     signal.signal(signal.SIGINT, _handle_signal)
@@ -54,6 +69,7 @@ def main():
         if not _RUNNING:
             break
 
+        _flush_unposted()
         chunk_count += 1
 
         if capture.is_silent(audio_chunk):

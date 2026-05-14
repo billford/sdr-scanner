@@ -22,7 +22,8 @@ flowchart TD
     H -->|INCIDENT| I[summarize.py\nClaude API]
     I -->|polished summary| J[db.py\nSave incident]
     J --> K{Cooldown OK?}
-    K -->|no| L[Saved, not posted]
+    K -->|no| L[Saved, not posted\nretried next chunk]
+    L -->|cooldown clears| M
     K -->|yes| M[post.py]
     M --> N([Zapier Webhook])
     M --> O([incidents.txt])
@@ -112,7 +113,7 @@ stream → whisper (free, local)
 
 From there you can route to SMS, email, Slack, or anything else Zapier supports — no code changes needed.
 
-The payload sent to Zapier:
+The payload sent to Zapier for incidents:
 
 ```json
 {
@@ -123,6 +124,8 @@ The payload sent to Zapier:
   "posted_at": "2026-05-12T14:32:00+00:00"
 }
 ```
+
+Stream alarms also POST to the same webhook with `"type": "stream_alarm"` so you can filter or route them separately in Zapier (e.g. send alarms to email, incidents to Facebook).
 
 ## Running as a background service (macOS)
 
@@ -178,6 +181,21 @@ Logs go to `scanner.log` in the project directory. The service auto-restarts wit
 | `post.py` | Zapier / text / queue posting |
 | `db.py` | SQLite incident log + dedup |
 | `config.py` | All configuration |
+
+## Stream resilience
+
+When a Broadcastify feed goes offline (feeder down, etc.) the pipeline:
+
+1. Retries quickly — 5s, 10s, 20s — to recover from brief dropouts
+2. After 3 consecutive failures, fires a **stream-down alarm**: macOS notification (Sosumi sound) + Zapier webhook with `type: stream_alarm`
+3. Switches to a **10-minute retry interval** to keep logs quiet until the feed recovers
+4. Logs `"Stream reconnected — clearing alarm"` and resets when the feed comes back
+
+Broadcastify 404 "Not Available" means the feeder is offline — it is not a payment or authentication issue. Both Cleveland feeds are free (`isPremium: false`).
+
+## Post cooldown
+
+`POST_COOLDOWN_MINUTES` (default: 5) prevents duplicate posts for the same incident type in a short window. Incidents blocked by the cooldown are **saved to the DB** and automatically posted once the cooldown clears — nothing is dropped.
 
 ## Notes
 
