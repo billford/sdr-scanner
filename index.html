@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="60">
+<title>Cleveland Scanner</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#0f1117;color:#e0e0e0;padding:1.5rem}
+h1{font-size:1.4rem;font-weight:600;color:#fff}
+.updated{font-size:.75rem;color:#666;margin-top:.25rem}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.5rem;flex-wrap:wrap;gap:.5rem}
+.feeds{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+.pill{padding:.3rem .75rem;border-radius:999px;font-size:.8rem;font-weight:500}
+.pill-online{background:#0d3320;color:#4ade80;border:1px solid #166534}
+.pill-offline{background:#3b0f0f;color:#f87171;border:1px solid #7f1d1d}
+.pill-unknown{background:#1f2937;color:#9ca3af;border:1px solid #374151}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1.5rem}
+.stat-card{background:#1a1d27;border:1px solid #2d3147;border-radius:8px;padding:1rem}
+.stat-label{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin-bottom:.25rem}
+.stat-value{font-size:1.75rem;font-weight:700;color:#fff}
+.stat-sub{font-size:.75rem;color:#6b7280;margin-top:.25rem}
+.section-title{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin-bottom:.6rem}
+.by-type{background:#1a1d27;border:1px solid #2d3147;border-radius:8px;padding:1rem;margin-bottom:1.5rem}
+.type-row{display:flex;justify-content:space-between;padding:.3rem 0;font-size:.85rem;border-bottom:1px solid #1f2333}
+.type-row:last-child{border-bottom:none}
+.type-count{color:#9ca3af}
+table{width:100%;border-collapse:collapse;background:#1a1d27;border:1px solid #2d3147;border-radius:8px;overflow:hidden;font-size:.85rem}
+th{background:#0f1117;color:#9ca3af;font-weight:500;text-align:left;padding:.6rem .75rem;border-bottom:1px solid #2d3147;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em}
+td{padding:.6rem .75rem;border-bottom:1px solid #1f2333;vertical-align:top}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#1f2333}
+.ts{color:#9ca3af;white-space:nowrap}
+.badge{background:#1e3a5f;color:#7dd3fc;padding:.15rem .5rem;border-radius:4px;font-size:.75rem;white-space:nowrap}
+.loc{color:#d1d5db;white-space:nowrap}
+.summary{color:#e0e0e0;line-height:1.4}
+.posted{text-align:center;color:#4ade80}
+.empty{text-align:center;color:#6b7280;padding:2rem}
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <h1>Cleveland Scanner</h1>
+    <div class="updated">Updated 14:19:21 EDT, May 14 2026 &middot; refreshes every 60s</div>
+  </div>
+  <div class="feeds"><span class="pill pill-online">● Feed 23058 since 12:46</span>
+<span class="pill pill-online">● Feed 11446 since 12:46</span>
+</div>
+</div>
+
+<div class="stats">
+  <div class="stat-card">
+    <div class="stat-label">Today</div>
+    <div class="stat-value">158</div>
+    <div class="stat-sub">incidents</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">This Week</div>
+    <div class="stat-value">158</div>
+    <div class="stat-sub">incidents</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Last Incident</div>
+    <div class="stat-value" style="font-size:1.1rem;padding-top:.4rem">14:19 May 14</div>
+  </div>
+</div>
+
+
+<div class="by-type">
+  <div class="section-title">This week by type</div>
+  <div class="type-row"><span>Fire</span><span class="type-count">26</span></div><div class="type-row"><span>Medical Emergency</span><span class="type-count">23</span></div><div class="type-row"><span>Assault</span><span class="type-count">23</span></div><div class="type-row"><span>Domestic Disturbance</span><span class="type-count">12</span></div><div class="type-row"><span>Medical</span><span class="type-count">9</span></div><div class="type-row"><span>Vehicle Accident</span><span class="type-count">4</span></div><div class="type-row"><span>MVA</span><span class="type-count">4</span></div><div class="type-row"><span>Vehicle</span><span class="type-count">4</span></div><div class="type-row"><span>Theft</span><span class="type-count">3</span></div><div class="type-row"><span>Vehicle Breakdown</span><span class="type-count">3</span></div><div class="type-row"><span>Threat</span><span class="type-count">2</span></div><div class="type-row"><span>Vehicle Stop</span><span class="type-count">2</span></div><div class="type-row"><span>Burglary</span><span class="type-count">2</span></div><div class="type-row"><span>Crime</span><span class="type-count">2</span></div><div class="type-row"><span>Property Crime</span><span class="type-count">2</span></div><div class="type-row"><span>Robbery</span><span class="type-count">2</span></div><div class="type-row"><span>Blackmail</span><span class="type-count">1</span></div><div class="type-row"><span>Vehicle Check</span><span class="type-count">1</span></div><div class="type-row"><span>False Alarm</span><span class="type-count">1</span></div><div class="type-row"><span>Domestic Violence Threats</span><span class="type-count">1</span></div><div class="type-row"><span>MEDICAL EMERGENCY</span><span class="type-count">1</span></div><div class="type-row"><span>Medical Issue</span><span class="type-count">1</span></div><div class="type-row"><span>Struggle</span><span class="type-count">1</span></div><div class="type-row"><span>Domestic Violence</span><span class="type-count">1</span></div><div class="type-row"><span>Distress Call</span><span class="type-count">1</span></div><div class="type-row"><span>Gun</span><span class="type-count">1</span></div><div class="type-row"><span>Accident</span><span class="type-count">1</span></div><div class="type-row"><span>Overdose</span><span class="type-count">1</span></div><div class="type-row"><span>CODE ONE DOMESTIC</span><span class="type-count">1</span></div><div class="type-row"><span>Vehicle Fire</span><span class="type-count">1</span></div><div class="type-row"><span>Burglary Alarm</span><span class="type-count">1</span></div><div class="type-row"><span>Missing Person</span><span class="type-count">1</span></div><div class="type-row"><span>Suspicious Activity</span><span class="type-count">1</span></div><div class="type-row"><span>Crash</span><span class="type-count">1</span></div><div class="type-row"><span>Vehicle Theft</span><span class="type-count">1</span></div><div class="type-row"><span>Vehicle Crash</span><span class="type-count">1</span></div><div class="type-row"><span>CIT</span><span class="type-count">1</span></div><div class="type-row"><span>Vehicle Pursuit</span><span class="type-count">1</span></div><div class="type-row"><span>Argumentative Vehicle Owner</span><span class="type-count">1</span></div><div class="type-row"><span>Code 1 Domestic</span><span class="type-count">1</span></div><div class="type-row"><span>Domestic Harassment</span><span class="type-count">1</span></div><div class="type-row"><span>Death</span><span class="type-count">1</span></div><div class="type-row"><span>Traffic Stop</span><span class="type-count">1</span></div><div class="type-row"><span>Disturbance</span><span class="type-count">1</span></div><div class="type-row"><span>Squatting</span><span class="type-count">1</span></div><div class="type-row"><span>CIT Filing</span><span class="type-count">1</span></div><div class="type-row"><span>Vehicle Incident</span><span class="type-count">1</span></div><div class="type-row"><span>STABBING</span><span class="type-count">1</span></div><div class="type-row"><span>Carjacking</span><span class="type-count">1</span></div><div class="type-row"><span>Break-in</span><span class="type-count">1</span></div><div class="type-row"><span>Civil Disturbance</span><span class="type-count">1</span></div>
+</div>
+
+<div class="section-title" style="margin-bottom:.6rem">Recent incidents (last 7 days)</div>
+<table>
+<thead><tr>
+  <th>Time</th><th>Type</th><th>Location</th><th>Summary</th><th>Posted</th>
+</tr></thead>
+<tbody>
+<tr>
+  <td class="ts">14:19 May 14</td>
+  <td><span class="badge">Medical Emergency</span></td>
+  <td class="loc">9500 Way Park Unit 715</td>
+  <td class="summary">[14:17] Welfare Check — 9500 Waypark, Unit 715 — Officers responded to check on a female with special needs at a Waypark address after concerns were raised that her ex-boyfriend, who has an extensive criminal history including robbery, may be staying in the unit. The female is listed as a former lease holder and is considered potentially endangered.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">14:17 May 14</td>
+  <td><span class="badge">Domestic Disturbance</span></td>
+  <td class="loc">3912 Smith Avenue</td>
+  <td class="summary">[14:15] Domestic Disturbance — 3912 Smith Avenue — Units responded to a domestic situation involving threats to kill a male, with children reported inside the residence.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">14:07 May 14</td>
+  <td><span class="badge">Domestic Disturbance</span></td>
+  <td class="loc">113th and Florian</td>
+  <td class="summary">[14:06] Domestic Disturbance — 6900 Lansing — A caller reported her child's father was harassing her, with a follow-up call at 13:45 indicating the situation had escalated to a physical altercation. No names or descriptions were provided; the caller was uncooperative with dispatchers.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">14:05 May 14</td>
+  <td><span class="badge">Vehicle Accident</span></td>
+  <td class="loc">Mackenzie's location unknown</td>
+  <td class="summary">[16:02] Vehicle Accident — Location Unknown — A KIA K5 was struck by another vehicle, with the at-fault driver reported to be intoxicated and uninsured. Officers are on scene handling the report.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">13:59 May 14</td>
+  <td><span class="badge">Blackmail</span></td>
+  <td class="loc">1701 Castle Avenue</td>
+  <td class="summary">[13:56] Disturbance — 4060 Lee Road (Shell Gas Station) — A person wearing a black jacket, hoodie, and black pants was reported refusing to leave the premises and making threats. Police were dispatched to the scene.</td>
+  <td class="posted">✓</td>
+</tr><tr>
+  <td class="ts">13:55 May 14</td>
+  <td><span class="badge">Vehicle Check</span></td>
+  <td class="loc">State and State, Alawishes</td>
+  <td class="summary">13:55 Warrant Check — 4066 Legview Ave. — Officers on scene ran vehicle and plate information; the registered owner has a possible outstanding warrant out of Highland Heights for a significant amount.</td>
+  <td class="posted">✓</td>
+</tr><tr>
+  <td class="ts">13:47 May 14</td>
+  <td><span class="badge">Assault</span></td>
+  <td class="loc">St. Alawishan School</td>
+  <td class="summary">13:47 Assault (juvenile) — St. Alawishan School — A 4-year-old was reportedly assaulted in the face by a 7-year-old at the school; one unit was dispatched to respond.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">13:38 May 14</td>
+  <td><span class="badge">Medical</span></td>
+  <td class="loc">Unknown</td>
+  <td class="summary">[13:37] Person Down — Location Unspecified — A medical unit was dispatched to assist an individual reported down. Further details were not provided in the dispatch.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">13:37 May 14</td>
+  <td><span class="badge">Domestic Disturbance</span></td>
+  <td class="loc">15611 Bridge</td>
+  <td class="summary">[13:37] Domestic Disturbance — E. 156th St. & Bridge Ave. — A woman reported her husband commanded a dog to attack her, resulting in injuries to her back. Officers responded for safety and to document a domestic report; the male suspect was last seen heading north on a nearby street, described as a Black male in a white t-shirt.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">13:33 May 14</td>
+  <td><span class="badge">Medical</span></td>
+  <td class="loc">Institute of Service, 311</td>
+  <td class="summary">13:33 Medical Emergency — 311 Institute of Service, Unit 2 — An injured person required medical attention; a unit has arrived on scene.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">13:33 May 14</td>
+  <td><span class="badge">Medical Emergency</span></td>
+  <td class="loc">Unknown Location</td>
+  <td class="summary">[13:32] Medical Call — Location Unknown — A male was found conscious and breathing but very confused, with crews responding to assess a possible medical episode.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">13:31 May 14</td>
+  <td><span class="badge">Threat</span></td>
+  <td class="loc">249524 Parkview</td>
+  <td class="summary">[13:29] Threats with a weapon — 24952 Parkview — A caller reported being threatened by a male who threw a broken bottle at them. A second caller, identified as the building manager, reported the same male was making threats on the property.</td>
+  <td class="posted">✓</td>
+</tr><tr>
+  <td class="ts">13:25 May 14</td>
+  <td><span class="badge">Medical Emergency</span></td>
+  <td class="loc">Unknown Location</td>
+  <td class="summary">13:24 Medical Emergency — Location Unknown — Rescue and EMS units are on scene responding to a medical emergency.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">13:24 May 14</td>
+  <td><span class="badge">Medical Emergency</span></td>
+  <td class="loc">Unknown Location</td>
+  <td class="summary">13:24 Medical Emergency — Location Unknown — A person has been reported injured at an unknown location. Units were dispatched to respond.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">13:23 May 14</td>
+  <td><span class="badge">Assault</span></td>
+  <td class="loc">East Nite & Prospect</td>
+  <td class="summary">[13:22] Assault — E. 9th St. & Prospect Ave. — A male was reported attacking two women at the intersection, with a second caller reporting she had also been assaulted in the area. Officers were dispatched to investigate.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">13:08 May 14</td>
+  <td><span class="badge">Domestic Disturbance</span></td>
+  <td class="loc">3723 Central Avenue</td>
+  <td class="summary">[13:06] Domestic Disturbance — 3723 Central Avenue — A resident called reporting her son is tearing up the home, screaming, and throwing objects. The caller noted he has a history of not taking his medication.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">13:08 May 14</td>
+  <td><span class="badge">Fire</span></td>
+  <td class="loc">Unknown Location</td>
+  <td class="summary">13:07 Structure Fire Investigation — Cleveland — Engine and truck units responded to a reported fire alarm; crews found alarms had already been reset upon arrival with no cause for alarm, and all units returned to service.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">13:06 May 14</td>
+  <td><span class="badge">Fire</span></td>
+  <td class="loc">Unknown Location</td>
+  <td class="summary">13:06 Structure Fire — Cleveland area — Units responded to a reported fire; crews on scene confirmed nothing showing upon arrival.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">12:56 May 14</td>
+  <td><span class="badge">Medical Emergency</span></td>
+  <td class="loc">Unknown Location</td>
+  <td class="summary">[12:56] Cardiac Arrest — Location Unspecified — Units responded to a reported cardiac arrest and confirmed patient contact was made.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">12:52 May 14</td>
+  <td><span class="badge">Assault</span></td>
+  <td class="loc">Black City</td>
+  <td class="summary">[12:52] Assault — Opportunity Corridor area — A woman reported being assaulted by another woman and a male suspect; she refused EMS. A firearm was noted to be present but was not used as a threat.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">12:45 May 14</td>
+  <td><span class="badge">False Alarm</span></td>
+  <td class="loc">Unknown Location</td>
+  <td class="summary">12:45 Alarm — Halle Elementary, 7901 — Emergency alarm activated at the school; responding units advised it may be a false alarm.</td>
+  <td class="posted">✓</td>
+</tr><tr>
+  <td class="ts">12:41 May 14</td>
+  <td><span class="badge">Domestic Violence Threats</span></td>
+  <td class="loc">Team Address</td>
+  <td class="summary">[12:41] Stolen Vehicle Recovery — Broadway Ave. — A suspect is being held on scene in connection with a stolen vehicle.</td>
+  <td class="posted">✓</td>
+</tr><tr>
+  <td class="ts">12:35 May 14</td>
+  <td><span class="badge">MEDICAL EMERGENCY</span></td>
+  <td class="loc">UNKNOWN</td>
+  <td class="summary">12:35 Medical Transport — Cleveland/Cuyahoga County — A person has been injured and is being transported to a medical facility.</td>
+  <td class="posted">✓</td>
+</tr><tr>
+  <td class="ts">12:35 May 14</td>
+  <td><span class="badge">Medical Issue</span></td>
+  <td class="loc">Unknown</td>
+  <td class="summary">12:35 Medical Emergency — Cleveland/Cuyahoga County — A person experiencing a medical issue required assistance. Units were dispatched to the scene.</td>
+  <td class="posted">✓</td>
+</tr><tr>
+  <td class="ts">12:27 May 14</td>
+  <td><span class="badge">Vehicle Stop</span></td>
+  <td class="loc">New Merrick</td>
+  <td class="summary">[12:27] Underage Driver Detained — New Merrick St. — Officers detained a female suspected of driving underage. Medical examiner's unit was notified regarding a separate unresponsive person at the scene.</td>
+  <td class="posted">✓</td>
+</tr><tr>
+  <td class="ts">12:19 May 14</td>
+  <td><span class="badge">Domestic Disturbance</span></td>
+  <td class="loc">West 5-9</td>
+  <td class="summary">12:19 Domestic Disturbance — West 59th Street — A resident called police requesting assistance removing a live-in male acquaintance from their home; the male was reportedly on scene damaging property. No weapons reported.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">12:15 May 14</td>
+  <td><span class="badge">Medical Emergency</span></td>
+  <td class="loc">Unknown Location</td>
+  <td class="summary">[12:15] Medical Emergency — Flats area, near Lakeshore Park — EMS responded to a 12-year-old female reported to be experiencing heart problems.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">12:13 May 14</td>
+  <td><span class="badge">Assault</span></td>
+  <td class="loc">Downtown Area</td>
+  <td class="summary">12:13 Felonious Assault — Cleveland — A suspect was taken into custody following a felonious assault, with one victim transported to the hospital with non-life-threatening injuries. Police presence remains on scene with streets temporarily restricted in the area.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">11:51 May 14</td>
+  <td><span class="badge">Burglary</span></td>
+  <td class="loc">1239</td>
+  <td class="summary">[11:50] Burglary — 1239 apartment — A suspect entered an apartment with no damage reported to the door. Officers are on scene and a report is being taken.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">11:49 May 14</td>
+  <td><span class="badge">Medical</span></td>
+  <td class="loc">Kinsman Corridor & King Sam Edward</td>
+  <td class="summary">[11:49] Medical Examiner Response — Kinsman Corridor, 1215 King Sam Edward — Medical examiner units are on scene and working to notify a family member while securing the area.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">11:43 May 14</td>
+  <td><span class="badge">Vehicle Accident</span></td>
+  <td class="loc">90 West</td>
+  <td class="summary">11:42 Motor Vehicle Accident — I-90 West and Prospect Ave. — Two-vehicle crash reported with possible injuries. State patrol notified.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">11:39 May 14</td>
+  <td><span class="badge">MVA</span></td>
+  <td class="loc">143706</td>
+  <td class="summary">11:37 Motor vehicle accident — Location unspecified — A two-vehicle collision resulted in injuries, with one vehicle towed and the driver transported to the hospital.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">11:37 May 14</td>
+  <td><span class="badge">Medical</span></td>
+  <td class="loc">Garden Valley</td>
+  <td class="summary">11:37 Medical Emergency — Garden Valley — Two medic units are out of service and requiring medical assistance, with additional units dispatched to the area.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">11:35 May 14</td>
+  <td><span class="badge">Medical Emergency</span></td>
+  <td class="loc">Unknown Location</td>
+  <td class="summary">[11:33] Pedestrian struck — Warrensville Heights area — A 24-year-old female was struck by a vehicle and was conscious and breathing at the scene. EMS responded.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">11:33 May 14</td>
+  <td><span class="badge">Medical Emergency</span></td>
+  <td class="loc">City Hall</td>
+  <td class="summary">[11:33] Medical Response — Cleveland City Hall — Medics responding to a report of a female who fell and sustained an unknown injury. Police are on scene.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">11:33 May 14</td>
+  <td><span class="badge">Medical Emergency</span></td>
+  <td class="loc">601 Lakeside</td>
+  <td class="summary">[11:33] Medical Call — 601 Lakeside Ave., Room 122 — A 40-year-old woman fell and is having difficulty getting up. EMS was requested; the patient was reported conscious.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">11:23 May 14</td>
+  <td><span class="badge">Medical Emergency</span></td>
+  <td class="loc">Unknown Location</td>
+  <td class="summary">11:23 Medical Response — Cleveland area — EMS responded to a call involving an injured adult, with crews requesting additional time on scene for medical documentation.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">11:23 May 14</td>
+  <td><span class="badge">Assault</span></td>
+  <td class="loc">4207 West Street</td>
+  <td class="summary">[11:21] Assault Investigation — 4207 West Street — Officers responded to follow up on an assault report, and a suspect has been identified at a local hospital; detectives were notified and may pursue felony charges if serious injuries are confirmed.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">11:17 May 14</td>
+  <td><span class="badge">Fire</span></td>
+  <td class="loc">West Tempton, Maine</td>
+  <td class="summary">11:15 Medical Emergency — Delray — A unit reported a subject at an address on Delray was en route to obtain a probate warrant; EMS was requested to stand by for a callback at the location.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">11:11 May 14</td>
+  <td><span class="badge">Struggle</span></td>
+  <td class="loc">Unknown Location</td>
+  <td class="summary">11:10 Disturbance — 1315 E. 86th St. — Police responded to a reported fight in the area. A caller requested officers but provided no further details.</td>
+  <td class="posted">✓</td>
+</tr><tr>
+  <td class="ts">11:03 May 14</td>
+  <td><span class="badge">Medical Emergency</span></td>
+  <td class="loc">Frankleveld 4</td>
+  <td class="summary">11:03 Medical Emergency — Frankly Rosneveld — A 9-year-old female is experiencing a sickle cell crisis; medics are responding to the scene.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">11:00 May 14</td>
+  <td><span class="badge">Domestic Violence</span></td>
+  <td class="loc">Location Unknown</td>
+  <td class="summary">[11:00] Domestic Disturbance — 1536 Claver Avenue — Officers responded to a domestic disturbance and determined no crime occurred; a mother and daughter had left the scene en route to school with no further incident expected.</td>
+  <td class="posted">✓</td>
+</tr><tr>
+  <td class="ts">11:00 May 14</td>
+  <td><span class="badge">Fire</span></td>
+  <td class="loc">Black Square Portfire</td>
+  <td class="summary">11:00 Structure Fire — Cleveland Hopkins International Airport — Multiple units responded to a reported fire at the airport. Additional units were dispatched to a separate incident on Route 237 south of the airport.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">10:59 May 14</td>
+  <td><span class="badge">Fire</span></td>
+  <td class="loc">Airport</td>
+  <td class="summary">[10:59] Structure Fire Response — Airport Runway B3 — Ladder 23 is on scene blocking the runway area for a fire response, with units continuing operations at the location.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">10:50 May 14</td>
+  <td><span class="badge">Fire</span></td>
+  <td class="loc">65th & Detroit</td>
+  <td class="summary">[10:49] Vehicle Fire — W. 65th St. & Detroit Ave. — A vehicle fire was reported at the intersection of W. 65th and Detroit Ave. The mayor was noted to be on scene.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">10:50 May 14</td>
+  <td><span class="badge">Fire</span></td>
+  <td class="loc">Airport</td>
+  <td class="summary">[10:50] Medical Emergency — Cleveland Hopkins International Airport — A fire engine is responding to a reported medical emergency at the airport. Airport fire units are also on scene.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">10:48 May 14</td>
+  <td><span class="badge">Medical Emergency</span></td>
+  <td class="loc">Airport Entrance</td>
+  <td class="summary">[10:48] Vehicle Accident with Injuries — Airport Entrance / Guardrail — A vehicle struck a guardrail near an airport entrance, with at least one male patient reported as barely breathing. EMS and flight response units were dispatched to the scene.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">10:48 May 14</td>
+  <td><span class="badge">MVA</span></td>
+  <td class="loc">Riverside, Drive to the Gings</td>
+  <td class="summary">10:48 Medical Emergency — 300 Riverside Drive — A male reported to be having a seizure; cannabis use was noted by responders on scene.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">10:46 May 14</td>
+  <td><span class="badge">Crime</span></td>
+  <td class="loc">Subway</td>
+  <td class="summary">10:46 Disorderly Group — Subway (3704 Canada) — Approximately 15 individuals, five of whom are reportedly harassing customers and acting aggressively, prompting staff to lock the doors. Possible drug activity also reported on scene.</td>
+  <td class="posted">·</td>
+</tr><tr>
+  <td class="ts">10:46 May 14</td>
+  <td><span class="badge">Fire</span></td>
+  <td class="loc">Riverside, Woburn</td>
+  <td class="summary">[10:46] Structure Fire — 5300 Riverside Drive, Parma — Tower 20 and Engine units are responding to a reported fire at the location.</td>
+  <td class="posted">·</td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>
