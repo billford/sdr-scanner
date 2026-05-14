@@ -1,6 +1,9 @@
 """Generates a self-refreshing static HTML dashboard from the incidents database."""
 import json
+import logging
+import subprocess
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,6 +14,11 @@ STREAM_STATUS_FILE = Path("stream_status.json")
 DASHBOARD_FILE = Path("dashboard.html")
 
 _status_lock = threading.Lock()
+_push_lock = threading.Lock()
+_LAST_PUSH: float = 0.0
+_PUSH_INTERVAL = 300  # push to gh-pages at most once every 5 minutes
+
+log = logging.getLogger(__name__)
 
 
 def update_stream_status(url: str, status: str) -> None:
@@ -45,6 +53,39 @@ def _fmt_time(iso: str, fmt: str = "%H:%M %b %d") -> str:
         return datetime.fromisoformat(iso).astimezone().strftime(fmt)
     except Exception:  # pylint: disable=broad-exception-caught
         return iso
+
+
+def _push_to_gh_pages() -> None:
+    """Push dashboard.html to the gh-pages branch via git plumbing. Rate-limited."""
+    global _LAST_PUSH  # pylint: disable=global-statement
+    with _push_lock:
+        if time.time() - _LAST_PUSH < _PUSH_INTERVAL:
+            return
+        try:
+            html = DASHBOARD_FILE.read_bytes()
+            blob = subprocess.check_output(
+                ["git", "hash-object", "-w", "--stdin"], input=html, timeout=10
+            ).decode().strip()
+            tree = subprocess.check_output(
+                ["git", "mktree"],
+                input=f"100644 blob {blob}\tindex.html\n".encode(),
+                timeout=10,
+            ).decode().strip()
+            parent = subprocess.check_output(
+                ["git", "rev-parse", "refs/remotes/origin/gh-pages"], timeout=10
+            ).decode().strip()
+            msg = f"Update dashboard {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
+            commit = subprocess.check_output(
+                ["git", "commit-tree", tree, "-p", parent, "-m", msg], timeout=10
+            ).decode().strip()
+            subprocess.run(
+                ["git", "push", "origin", f"{commit}:refs/heads/gh-pages"],
+                capture_output=True, timeout=30, check=False,
+            )
+            _LAST_PUSH = time.time()
+            log.info("Dashboard pushed to gh-pages")
+        except Exception:  # pylint: disable=broad-exception-caught
+            log.debug("gh-pages push skipped (git not available or not configured)")
 
 
 def generate() -> None:
@@ -190,3 +231,4 @@ tr:hover td{{background:#1f2333}}
 </html>"""
 
     DASHBOARD_FILE.write_text(html, encoding="utf-8")
+    _push_to_gh_pages()
