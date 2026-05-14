@@ -15,6 +15,8 @@ import numpy as np
 
 import requests
 
+import dashboard
+
 from config import (
     BROADCASTIFY_FEED_URL,
     CHUNK_DURATION_SECONDS,
@@ -59,6 +61,7 @@ def _send_stream_alarm(url: str, exc: Exception) -> None:
         except Exception:  # pylint: disable=broad-exception-caught
             pass
 
+    dashboard.update_stream_status(url, "offline")
     log.error("Stream alarm sent for %s", url)
 
 
@@ -87,6 +90,7 @@ def stream_chunks(url: str = BROADCASTIFY_FEED_URL) -> Iterator[bytes]:
                 if alarm_sent:
                     log.warning("Stream %s reconnected — clearing alarm", url)
                     alarm_sent = False
+                dashboard.update_stream_status(url, "online")
                 backoff = 5
                 fail_count = 0
                 for raw in resp.iter_content(chunk_size=STREAM_CHUNK_BYTES):

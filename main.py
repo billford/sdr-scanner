@@ -15,6 +15,7 @@ import transcribe
 import classify
 import summarize
 import post
+import dashboard
 from config import POST_COOLDOWN_MINUTES, BROADCASTIFY_FEED_URLS
 
 logging.basicConfig(
@@ -62,6 +63,7 @@ def main():
     signal.signal(signal.SIGTERM, _handle_signal)
 
     db.init_db()
+    dashboard.generate()
     log.info("Scanner monitor started. Backend: %s | Feeds: %s", post.POST_BACKEND, BROADCASTIFY_FEED_URLS)
 
     chunk_count = 0
@@ -117,6 +119,8 @@ def main():
             db.mark_posted(incident_id, post_id)
         else:
             log.info("Cooldown active — saved but not posted.")
+
+        dashboard.generate()
 
 
 if __name__ == "__main__":
