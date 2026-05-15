@@ -8,6 +8,7 @@ Pipeline:
 """
 import logging
 import signal
+from datetime import datetime, timezone, timedelta
 
 import db
 import capture
@@ -16,7 +17,7 @@ import classify
 import summarize
 import post
 import dashboard
-from config import POST_COOLDOWN_MINUTES, BROADCASTIFY_FEED_URLS
+from config import POST_COOLDOWN_MINUTES, POST_MAX_AGE_HOURS, BROADCASTIFY_FEED_URLS
 
 logging.basicConfig(
     level=logging.INFO,
@@ -43,10 +44,18 @@ def _cooldown_ok(incident_type: str | None) -> bool:
 
 
 def _flush_unposted() -> None:
-    """Post any incidents that were held back by cooldown and are now clear."""
+    """Drain the unposted queue: drop stale incidents, post at most one fresh one per call."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=POST_MAX_AGE_HOURS)
     for row in db.unposted_incidents():
+        created = datetime.fromisoformat(row["created_at"])
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        if created < cutoff:
+            log.info("Dropping stale incident #%d (older than %dh)", row["id"], POST_MAX_AGE_HOURS)
+            db.mark_posted(row["id"], "stale")
+            continue
         if _cooldown_ok(row.get("incident_type")):
-            log.info("Cooldown cleared — posting held incident #%d: %s", row["id"], row["summary"][:80])
+            log.info("Flushing held incident #%d: %s", row["id"], row["summary"][:80])
             incident = {
                 "summary": row["summary"],
                 "type": row["incident_type"],
@@ -55,6 +64,7 @@ def _flush_unposted() -> None:
             }
             post_id = post.post_incident(incident)
             db.mark_posted(row["id"], post_id)
+            return  # one post per flush cycle — drains at ~1/min
 
 
 def main():

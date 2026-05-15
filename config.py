@@ -33,6 +33,7 @@ SILENCE_THRESHOLD_RMS = 500
 WHISPER_MODEL = "base.en"
 CLAUDE_MODEL = "claude-sonnet-4-6"
 POST_COOLDOWN_MINUTES = 5
+POST_MAX_AGE_HOURS = int(os.getenv("POST_MAX_AGE_HOURS", "4"))
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 DB_PATH = "incidents.db"
 QUEUE_FILE = "post_queue.json"
