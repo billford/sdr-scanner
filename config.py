@@ -40,7 +40,7 @@ QUEUE_FILE = "post_queue.json"
 TEXT_OUTPUT_FILE = os.getenv("TEXT_OUTPUT_FILE", "incidents.txt")
 ZAPIER_WEBHOOK_URL = os.getenv("ZAPIER_WEBHOOK_URL", "")
 
-# Local Ollama classifier
+# Ollama classifier (via olla proxy)
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://192.168.1.203:11434")
 
