@@ -66,9 +66,15 @@ def _push_to_gh_pages() -> None:
             blob = subprocess.check_output(
                 ["git", "hash-object", "-w", "--stdin"], input=html, timeout=10
             ).decode().strip()
+            nojekyll_blob = subprocess.check_output(
+                ["git", "hash-object", "-w", "--stdin"], input=b"", timeout=10
+            ).decode().strip()
             tree = subprocess.check_output(
                 ["git", "mktree"],
-                input=f"100644 blob {blob}\tindex.html\n".encode(),
+                input=(
+                    f"100644 blob {blob}\tindex.html\n"
+                    f"100644 blob {nojekyll_blob}\t.nojekyll\n"
+                ).encode(),
                 timeout=10,
             ).decode().strip()
             parent = subprocess.check_output(
