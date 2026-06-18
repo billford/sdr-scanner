@@ -42,7 +42,7 @@ ZAPIER_WEBHOOK_URL = os.getenv("ZAPIER_WEBHOOK_URL", "")
 
 # Ollama classifier (via olla proxy)
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://192.168.1.203:11434")
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://192.168.1.182:11434")
 
 # Stream capture
 STREAM_READ_TIMEOUT = 30

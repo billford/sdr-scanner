@@ -28,6 +28,7 @@ _INCIDENT_PATTERNS = re.compile(
     # Medical
     r"medical|ems|cardiac|unconscious|not breathing|difficulty breath|"
     r"overdose|trauma|chest pain|fall victim|seizure|unresponsive|"
+    r"suicide|suicidal|person down|subject down|welfare check|"
     # Accident / traffic
     r"mva|motor vehicle|vehicle accident|traffic accident|10-50|collision|"
     r"crash|vehicle into|"

@@ -1,4 +1,4 @@
-name: Lint & Security
+name: CI
 
 on:
   push:
@@ -7,6 +7,27 @@ on:
     branches: ["main"]
 
 jobs:
+  test:
+    name: "pytest (${{ matrix.python-version }})"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-ci.txt
+
+      - name: Run pytest
+        run: pytest tests/ -v
+
   pylint:
     name: Pylint
     runs-on: ubuntu-latest
@@ -19,7 +40,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install pylint -r requirements.txt
+        run: pip install -r requirements-ci.txt
 
       - name: Run pylint
         run: |

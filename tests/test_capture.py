@@ -69,22 +69,25 @@ def test_rms_level_invalid_data():
 # ── stream_chunks ─────────────────────────────────────────────────────────────
 
 def test_stream_chunks_yields_target_size():
-    # Generate enough fake bytes to fill two chunks
     from config import CHUNK_DURATION_SECONDS
     target = 4000 * CHUNK_DURATION_SECONDS  # BYTES_PER_SECOND * duration
     fake_data = bytes(target * 2 + 100)
-
     chunks_data = [fake_data[i:i+4096] for i in range(0, len(fake_data), 4096)]
 
-    mock_resp = MagicMock()
-    mock_resp.iter_content.return_value = iter(chunks_data)
-    mock_resp.__enter__ = lambda s: s
-    mock_resp.__exit__ = MagicMock(return_value=False)
+    with patch("capture._open_stream", return_value=_make_mock_resp(chunks_data)):
+        with patch("capture.dashboard.update_stream_status"):
+            gen = stream_chunks("http://fake-url")
+            chunk = next(gen)
+            assert len(chunk) >= target
 
-    with patch("capture.requests.get", return_value=mock_resp):
-        gen = stream_chunks("http://fake-url")
-        chunk = next(gen)
-        assert len(chunk) >= target
+
+def _make_mock_resp(chunks_data):
+    """Return a properly-configured context-manager mock for _open_stream."""
+    mock_resp = MagicMock()
+    mock_resp.__enter__ = lambda s: s   # resp inside 'with' must be the same object
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    mock_resp.iter_content.return_value = iter(chunks_data)
+    return mock_resp
 
 
 def test_stream_chunks_reconnects_on_error():
@@ -93,17 +96,57 @@ def test_stream_chunks_reconnects_on_error():
     fake_data = bytes(target + 100)
     chunks_data = [fake_data[i:i+4096] for i in range(0, len(fake_data), 4096)]
 
-    def mock_get(*args, **kwargs):
+    def mock_open_stream(_url):
         call_count["n"] += 1
         if call_count["n"] == 1:
             raise ConnectionError("simulated drop")
-        mock_resp = MagicMock()
-        mock_resp.iter_content.return_value = iter(chunks_data)
-        return mock_resp
+        return _make_mock_resp(chunks_data)
 
-    with patch("capture.requests.get", side_effect=mock_get):
-        with patch("capture.time.sleep"):  # don't actually sleep
-            gen = stream_chunks("http://fake-url")
-            chunk = next(gen)
-            assert call_count["n"] == 2  # failed once, reconnected
-            assert len(chunk) > 0
+    with patch("capture._open_stream", side_effect=mock_open_stream):
+        with patch("capture.time.sleep"):
+            with patch("capture.dashboard.update_stream_status"):
+                gen = stream_chunks("http://fake-url")
+                chunk = next(gen)
+                assert call_count["n"] == 2  # failed once, reconnected
+                assert len(chunk) > 0
+
+
+def test_stream_chunks_stall_reconnects():
+    """If iter_content blocks and produces no data, reconnect after STALL_TIMEOUT_SECONDS."""
+    import threading
+
+    call_count = {"n": 0}
+    target = 4000 * 60
+    fake_data = bytes(target + 100)
+    chunks_data = [fake_data[i:i+4096] for i in range(0, len(fake_data), 4096)]
+
+    class _BlockForever:
+        """Iterator whose __next__ blocks indefinitely — simulates a hung CDN connection."""
+        _never = threading.Event()
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            self._never.wait()  # releases GIL; never set, so blocks forever
+            raise StopIteration  # unreachable, but satisfies type checker
+
+    def mock_open_stream(_url):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            mock_resp = MagicMock()
+            mock_resp.__enter__ = lambda s: s
+            mock_resp.__exit__ = MagicMock(return_value=False)
+            mock_resp.iter_content.return_value = _BlockForever()
+            return mock_resp
+        return _make_mock_resp(chunks_data)
+
+    # Use a tiny stall timeout so the test completes in ~0.2s rather than 90s
+    with patch("capture._open_stream", side_effect=mock_open_stream):
+        with patch("capture.STALL_TIMEOUT_SECONDS", 0.1):
+            with patch("capture.time.sleep"):
+                with patch("capture.dashboard.update_stream_status"):
+                    gen = stream_chunks("http://fake-url")
+                    chunk = next(gen)
+                    assert call_count["n"] == 2  # stalled on first, reconnected on second
+                    assert len(chunk) > 0

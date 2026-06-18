@@ -1,7 +1,7 @@
 """Generates a self-refreshing static HTML dashboard from the incidents database."""
 import json
 import logging
-import subprocess
+import subprocess  # nosec B404 — only used for git plumbing; no user input
 import threading
 import time
 from datetime import datetime, timezone
@@ -28,7 +28,7 @@ def update_stream_status(url: str, status: str) -> None:
         if STREAM_STATUS_FILE.exists():
             try:
                 data = json.loads(STREAM_STATUS_FILE.read_text(encoding="utf-8"))
-            except Exception:  # pylint: disable=broad-exception-caught
+            except Exception:  # pylint: disable=broad-exception-caught  # nosec B110 — corrupt file, start fresh
                 pass
         data[url] = {"status": status, "since": datetime.now(timezone.utc).isoformat()}
         STREAM_STATUS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -39,7 +39,7 @@ def _load_stream_status() -> dict:
         if STREAM_STATUS_FILE.exists():
             try:
                 return json.loads(STREAM_STATUS_FILE.read_text(encoding="utf-8"))
-            except Exception:  # pylint: disable=broad-exception-caught
+            except Exception:  # pylint: disable=broad-exception-caught  # nosec B110 — return empty on any parse error
                 pass
     return {}
 
@@ -51,7 +51,7 @@ def _feed_label(url: str) -> str:
 def _fmt_time(iso: str, fmt: str = "%H:%M %b %d") -> str:
     try:
         return datetime.fromisoformat(iso).astimezone().strftime(fmt)
-    except Exception:  # pylint: disable=broad-exception-caught
+    except Exception:  # pylint: disable=broad-exception-caught  # nosec B110 — return raw string on parse failure
         return iso
 
 
@@ -63,13 +63,13 @@ def _push_to_gh_pages() -> None:
             return
         try:
             html = DASHBOARD_FILE.read_bytes()
-            blob = subprocess.check_output(
+            blob = subprocess.check_output(  # nosec — hardcoded git cmd, no user input
                 ["git", "hash-object", "-w", "--stdin"], input=html, timeout=10
             ).decode().strip()
-            nojekyll_blob = subprocess.check_output(
+            nojekyll_blob = subprocess.check_output(  # nosec — hardcoded git cmd
                 ["git", "hash-object", "-w", "--stdin"], input=b"", timeout=10
             ).decode().strip()
-            tree = subprocess.check_output(
+            tree = subprocess.check_output(  # nosec — hardcoded git cmd
                 ["git", "mktree"],
                 input=(
                     f"100644 blob {blob}\tindex.html\n"
@@ -77,20 +77,20 @@ def _push_to_gh_pages() -> None:
                 ).encode(),
                 timeout=10,
             ).decode().strip()
-            parent = subprocess.check_output(
+            parent = subprocess.check_output(  # nosec — hardcoded git cmd
                 ["git", "rev-parse", "refs/remotes/origin/gh-pages"], timeout=10
             ).decode().strip()
             msg = f"Update dashboard {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
-            commit = subprocess.check_output(
+            commit = subprocess.check_output(  # nosec — hardcoded git cmd
                 ["git", "commit-tree", tree, "-p", parent, "-m", msg], timeout=10
             ).decode().strip()
-            subprocess.run(
+            subprocess.run(  # nosec — hardcoded git cmd
                 ["git", "push", "origin", f"{commit}:refs/heads/gh-pages"],
                 capture_output=True, timeout=30, check=False,
             )
             _LAST_PUSH = time.time()
             log.info("Dashboard pushed to gh-pages")
-        except Exception:  # pylint: disable=broad-exception-caught
+        except Exception:  # pylint: disable=broad-exception-caught  # nosec B110 — best-effort push
             log.debug("gh-pages push skipped (git not available or not configured)")
 
 

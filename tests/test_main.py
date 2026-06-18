@@ -7,23 +7,36 @@ import main
 
 def test_cooldown_ok_no_recent_incidents():
     with patch("main.db.recent_incidents", return_value=[]):
-        assert main._cooldown_ok() is True
+        assert main._cooldown_ok("Structure Fire") is True
 
 
 def test_cooldown_ok_recent_incident_not_posted():
-    with patch("main.db.recent_incidents", return_value=[{"posted": 0}]):
-        assert main._cooldown_ok() is True
+    row = {"posted": 0, "incident_type": "Structure Fire"}
+    with patch("main.db.recent_incidents", return_value=[row]):
+        assert main._cooldown_ok("Structure Fire") is True
 
 
 def test_cooldown_ok_recent_incident_posted():
-    with patch("main.db.recent_incidents", return_value=[{"posted": 1}]):
-        assert main._cooldown_ok() is False
+    row = {"posted": 1, "incident_type": "Structure Fire"}
+    with patch("main.db.recent_incidents", return_value=[row]):
+        assert main._cooldown_ok("Structure Fire") is False
+
+
+def test_cooldown_ok_different_type_not_blocked():
+    # Posted incident of a different type should not block this type
+    row = {"posted": 1, "incident_type": "Medical Emergency"}
+    with patch("main.db.recent_incidents", return_value=[row]):
+        assert main._cooldown_ok("Structure Fire") is True
 
 
 def test_cooldown_ok_mixed_incidents():
-    incidents = [{"posted": 0}, {"posted": 1}, {"posted": 0}]
+    incidents = [
+        {"posted": 0, "incident_type": "Structure Fire"},
+        {"posted": 1, "incident_type": "Structure Fire"},
+        {"posted": 0, "incident_type": "Structure Fire"},
+    ]
     with patch("main.db.recent_incidents", return_value=incidents):
-        assert main._cooldown_ok() is False
+        assert main._cooldown_ok("Structure Fire") is False
 
 
 # ── _handle_signal ────────────────────────────────────────────────────────────
@@ -75,7 +88,7 @@ def base_mocks(monkeypatch):
 
 def _run_main_with_chunks(chunks, mocks):
     with patch("main.db.init_db", mocks["init_db"]), \
-         patch("main.capture.stream_chunks", return_value=iter(chunks)), \
+         patch("main.capture.stream_chunks_multi", return_value=iter(chunks)), \
          patch("main.capture.is_silent", mocks["is_silent"]), \
          patch("main.transcribe.transcribe", mocks["transcribe"]), \
          patch("main.db.transcript_hash", mocks["transcript_hash"]), \
@@ -88,6 +101,8 @@ def _run_main_with_chunks(chunks, mocks):
          patch("main.db.mark_posted", mocks["mark_posted"]), \
          patch("main.post.post_incident", mocks["post_incident"]), \
          patch("main.db.recent_incidents", mocks["recent_incidents"]), \
+         patch("main.db.unposted_incidents", return_value=[]), \
+         patch("main.dashboard.generate"), \
          patch("main.signal.signal"):
         main.main()
 
@@ -132,7 +147,9 @@ def test_main_full_pipeline_posts_incident(base_mocks):
 
 
 def test_main_cooldown_skips_post(base_mocks):
-    base_mocks["recent_incidents"] = MagicMock(return_value=[{"posted": 1}])
+    base_mocks["recent_incidents"] = MagicMock(
+        return_value=[{"posted": 1, "incident_type": "Structure Fire"}]
+    )
     _run_main_with_chunks([b"audio"], base_mocks)
     base_mocks["save_incident"].assert_called_once()
     base_mocks["post_incident"].assert_not_called()

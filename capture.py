@@ -9,7 +9,7 @@ import time
 import logging
 from typing import Iterator
 
-import subprocess
+import subprocess  # nosec B404 — needed for osascript notification; no user input
 
 import numpy as np
 
@@ -36,6 +36,11 @@ BYTES_PER_SECOND = 4000
 # Fire the stream-down alarm after this many consecutive failures.
 ALARM_FAIL_THRESHOLD = 3
 
+# If no bytes arrive within this window, treat the connection as hung and reconnect.
+# requests' socket timeout only applies to the initial connect; iter_content can block
+# indefinitely when the CDN keeps the TCP connection alive but stops sending audio frames.
+STALL_TIMEOUT_SECONDS = 90
+
 
 def _send_stream_alarm(url: str, exc: Exception) -> None:
     """Fire a stream-down alarm: macOS notification + Zapier webhook."""
@@ -46,9 +51,9 @@ def _send_stream_alarm(url: str, exc: Exception) -> None:
     # macOS notification (no-op on non-Mac or when running headless)
     try:
         script = f'display notification "{msg}" with title "{title}" sound name "Sosumi"'
-        subprocess.run(["osascript", "-e", script], check=False, timeout=5)
-    except Exception:  # pylint: disable=broad-exception-caught
-        pass
+        subprocess.run(["osascript", "-e", script], check=False, timeout=5)  # nosec — hardcoded cmd, no user input
+    except Exception:  # pylint: disable=broad-exception-caught  # nosec B110 — fire-and-forget notification
+        log.debug("osascript notification failed")
 
     # Zapier webhook — same endpoint as incidents, differentiated by type field
     if ZAPIER_WEBHOOK_URL:
@@ -58,8 +63,8 @@ def _send_stream_alarm(url: str, exc: Exception) -> None:
                 json={"type": "stream_alarm", "summary": f"{title}: feed {feed_id}", "location": None, "time": None},
                 timeout=10,
             )
-        except Exception:  # pylint: disable=broad-exception-caught
-            pass
+        except Exception:  # pylint: disable=broad-exception-caught  # nosec B110 — fire-and-forget alarm webhook
+            log.debug("Zapier alarm webhook failed")
 
     dashboard.update_stream_status(url, "offline")
     log.error("Stream alarm sent for %s", url)
@@ -93,7 +98,30 @@ def stream_chunks(url: str = BROADCASTIFY_FEED_URL) -> Iterator[bytes]:
                 dashboard.update_stream_status(url, "online")
                 backoff = 5
                 fail_count = 0
-                for raw in resp.iter_content(chunk_size=STREAM_CHUNK_BYTES):
+                buf = io.BytesIO()
+
+                # Run iter_content in a daemon thread so we can enforce a stall timeout.
+                raw_q: queue.Queue = queue.Queue(maxsize=64)
+
+                def _reader(r=resp, _q=raw_q) -> None:
+                    try:
+                        for raw in r.iter_content(chunk_size=STREAM_CHUNK_BYTES):
+                            _q.put(raw or b"")
+                    except Exception as reader_exc:  # pylint: disable=broad-exception-caught
+                        log.debug("Stream reader exited: %s", reader_exc)
+                    _q.put(None)  # sentinel: stream ended or errored
+
+                threading.Thread(target=_reader, daemon=True).start()
+
+                while True:
+                    try:
+                        raw = raw_q.get(timeout=STALL_TIMEOUT_SECONDS)
+                    except queue.Empty as exc:
+                        raise TimeoutError(
+                            f"stream stalled — no data for {STALL_TIMEOUT_SECONDS}s"
+                        ) from exc
+                    if raw is None:
+                        raise ConnectionResetError("stream closed by server")
                     if not raw:
                         continue
                     buf.write(raw)
