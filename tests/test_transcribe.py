@@ -4,12 +4,15 @@ from unittest.mock import patch, MagicMock
 
 # ── local whisper backend ─────────────────────────────────────────────────────
 
-def test_transcribe_local_returns_text():
-    mock_model = MagicMock()
-    mock_model.transcribe.return_value = {"text": "  Engine 3 structure fire  "}
+def _make_mock_pool(text: str) -> MagicMock:
+    pool = MagicMock()
+    pool.apply.return_value = text.strip()
+    return pool
 
+
+def test_transcribe_local_returns_text():
     with patch("transcribe.WHISPER_BACKEND", "local"):
-        with patch("transcribe._get_local_model", return_value=mock_model):
+        with patch("transcribe._get_pool", return_value=_make_mock_pool("  Engine 3 structure fire  ")):
             from transcribe import _transcribe_local
             result = _transcribe_local(b"fake audio bytes")
 
@@ -17,10 +20,7 @@ def test_transcribe_local_returns_text():
 
 
 def test_transcribe_local_strips_whitespace():
-    mock_model = MagicMock()
-    mock_model.transcribe.return_value = {"text": "\n  shots fired on Main  \n"}
-
-    with patch("transcribe._get_local_model", return_value=mock_model):
+    with patch("transcribe._get_pool", return_value=_make_mock_pool("\n  shots fired on Main  \n")):
         from transcribe import _transcribe_local
         result = _transcribe_local(b"audio")
 
@@ -28,19 +28,22 @@ def test_transcribe_local_strips_whitespace():
 
 
 def test_transcribe_returns_empty_on_model_error():
+    broken_pool = MagicMock()
+    broken_pool.apply.side_effect = RuntimeError("model load failed")
+
     with patch("transcribe.WHISPER_BACKEND", "local"):
-        with patch("transcribe._get_local_model", side_effect=RuntimeError("model load failed")):
+        with patch("transcribe._get_pool", return_value=broken_pool):
             from transcribe import transcribe
             result = transcribe(b"some audio")
     assert result == ""
 
 
 def test_transcribe_returns_empty_on_transcribe_error():
-    mock_model = MagicMock()
-    mock_model.transcribe.side_effect = Exception("GPU error")
+    broken_pool = MagicMock()
+    broken_pool.apply.side_effect = Exception("GPU error")
 
     with patch("transcribe.WHISPER_BACKEND", "local"):
-        with patch("transcribe._get_local_model", return_value=mock_model):
+        with patch("transcribe._get_pool", return_value=broken_pool):
             from transcribe import transcribe
             result = transcribe(b"audio")
     assert result == ""
@@ -56,7 +59,6 @@ def test_transcribe_openai_returns_text():
 
     with patch("transcribe.WHISPER_BACKEND", "openai"):
         with patch("transcribe.OpenAI", mock_client, create=True):
-            # Patch at the point of use inside the function
             import transcribe
             with patch.object(transcribe, "_transcribe_openai",
                               wraps=lambda b: mock_transcription.text.strip()):
