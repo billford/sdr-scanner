@@ -27,6 +27,7 @@ def test_polish_updates_summary(tmp_db, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     import summarize, config
     monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "sk-ant-test")
+    monkeypatch.setattr(summarize, "ANTHROPIC_API_KEY", "sk-ant-test")
     summarize._CLIENT = None
 
     polished_text = "[14:32] Structure Fire — 123 Main Street — Engine 3 responded to a working fire."
@@ -72,6 +73,7 @@ def test_polish_does_not_mutate_original(tmp_db, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     import summarize, config
     monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "sk-ant-test")
+    monkeypatch.setattr(summarize, "ANTHROPIC_API_KEY", "sk-ant-test")
 
     mock_client = MagicMock()
     mock_client.messages.create.return_value = _mock_claude_response("Polished version")
