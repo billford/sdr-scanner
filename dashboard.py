@@ -93,10 +93,12 @@ def _push_to_gh_pages() -> None:
                 capture_output=True, timeout=30, check=False,
             )
             if result.returncode != 0:
-                log.warning(
-                    "gh-pages push failed (exit %d): %s",
-                    result.returncode,
-                    result.stderr.decode(errors="replace").strip(),
+                stderr = result.stderr.decode(errors="replace").strip()
+                log.warning("gh-pages push failed (exit %d): %s", result.returncode, stderr)
+                subprocess.run(  # nosec — hardcoded osascript, no user input
+                    ["osascript", "-e",
+                     f'display notification "{stderr[:200]}" with title "Scanner" subtitle "gh-pages push failed"'],
+                    capture_output=True, check=False,
                 )
                 return
             _LAST_PUSH = time.time()
