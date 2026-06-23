@@ -88,14 +88,21 @@ def _push_to_gh_pages() -> None:
             commit = subprocess.check_output(  # nosec — hardcoded git cmd
                 ["git", "commit-tree", tree, "-p", parent, "-m", msg], timeout=10
             ).decode().strip()
-            subprocess.run(  # nosec — hardcoded git cmd
+            result = subprocess.run(  # nosec — hardcoded git cmd
                 ["git", "push", "origin", f"{commit}:refs/heads/gh-pages"],
                 capture_output=True, timeout=30, check=False,
             )
+            if result.returncode != 0:
+                log.warning(
+                    "gh-pages push failed (exit %d): %s",
+                    result.returncode,
+                    result.stderr.decode(errors="replace").strip(),
+                )
+                return
             _LAST_PUSH = time.time()
             log.info("Dashboard pushed to gh-pages")
         except Exception:  # pylint: disable=broad-exception-caught  # nosec B110 — best-effort push
-            log.debug("gh-pages push skipped (git not available or not configured)")
+            log.warning("gh-pages push skipped", exc_info=True)
 
 
 def generate() -> None:
