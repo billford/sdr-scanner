@@ -8,6 +8,7 @@ Pipeline:
 """
 import logging
 import signal
+import time
 from datetime import datetime, timezone, timedelta
 
 import db
@@ -18,6 +19,8 @@ import summarize
 import post
 import dashboard
 from config import POST_COOLDOWN_MINUTES, POST_MAX_AGE_HOURS, BROADCASTIFY_FEED_URLS
+
+_DASHBOARD_INTERVAL = 300  # regenerate and push even when quiet
 
 logging.basicConfig(
     level=logging.INFO,
@@ -76,6 +79,7 @@ def main():
     dashboard.generate()
     log.info("Scanner monitor started. Backend: %s | Feeds: %s", post.POST_BACKEND, BROADCASTIFY_FEED_URLS)
 
+    _last_dashboard = time.monotonic()
     chunk_count = 0
     for audio_chunk in capture.stream_chunks_multi(BROADCASTIFY_FEED_URLS):
         if not _RUNNING:
@@ -83,6 +87,10 @@ def main():
 
         _flush_unposted()
         chunk_count += 1
+
+        if time.monotonic() - _last_dashboard >= _DASHBOARD_INTERVAL:
+            dashboard.generate()
+            _last_dashboard = time.monotonic()
 
         if capture.is_silent(audio_chunk):
             log.debug("Chunk #%d: silent, skipping.", chunk_count)

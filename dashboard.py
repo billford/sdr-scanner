@@ -77,6 +77,10 @@ def _push_to_gh_pages() -> None:
                 ).encode(),
                 timeout=10,
             ).decode().strip()
+            subprocess.run(  # nosec — hardcoded git cmd
+                ["git", "fetch", "origin", "gh-pages:refs/remotes/origin/gh-pages"],
+                capture_output=True, timeout=30, check=False,
+            )
             parent = subprocess.check_output(  # nosec — hardcoded git cmd
                 ["git", "rev-parse", "refs/remotes/origin/gh-pages"], timeout=10
             ).decode().strip()
