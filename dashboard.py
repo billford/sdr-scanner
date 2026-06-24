@@ -253,8 +253,10 @@ def generate() -> None:
             f'<div class="type-row"><span>{t}</span><span class="type-count">{c}</span></div>'
             for t, c in rows
         )
+        cat_total = sum(c for _, c in rows)
         by_type_sections += (
-            f'<div class="type-cat-header" style="background:{bg};color:{fg}">{cat}</div>'
+            f'<div class="type-cat-header" style="background:{bg};color:{fg}">'
+            f'{cat}<span class="type-cat-total">{cat_total}</span></div>'
             f'{rows_inner}'
         )
     by_type_block = f"""
@@ -342,7 +344,8 @@ tr:hover td{{background:#1f2333}}
 .posted{{text-align:center;color:#4ade80}}
 .empty{{text-align:center;color:#6b7280;padding:2rem}}
 .cat-header td{{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;padding:.4rem .75rem;border-bottom:1px solid #2d3147}}
-.type-cat-header{{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;padding:.35rem .5rem;margin:.4rem -.5rem 0;border-radius:4px}}
+.type-cat-header{{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;padding:.35rem .5rem;margin:.4rem -.5rem 0;border-radius:4px;display:flex;justify-content:space-between}}
+.type-cat-total{{font-variant-numeric:tabular-nums}}
 </style>
 </head>
 <body>
