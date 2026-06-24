@@ -17,6 +17,8 @@ _status_lock = threading.Lock()
 _push_lock = threading.Lock()
 _LAST_PUSH: float = 0.0
 _PUSH_INTERVAL = 300  # push to gh-pages at most once every 5 minutes
+_PAGES_POLL_INTERVAL = 15   # seconds between build status checks
+_PAGES_POLL_TIMEOUT = 120   # give up waiting after this many seconds
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +55,58 @@ def _fmt_time(iso: str, fmt: str = "%H:%M %b %d") -> str:
         return datetime.fromisoformat(iso).astimezone().strftime(fmt)
     except Exception:  # pylint: disable=broad-exception-caught  # nosec B110 — return raw string on parse failure
         return iso
+
+
+def _gh_repo_slug() -> str:
+    """Return 'owner/repo' from the origin remote URL."""
+    url = subprocess.check_output(  # nosec
+        ["git", "remote", "get-url", "origin"], timeout=5
+    ).decode().strip()
+    # handles https://github.com/owner/repo.git and git@github.com:owner/repo.git
+    url = url.removesuffix(".git")
+    return url.split("github.com/")[-1].split("github.com:")[-1]
+
+
+def _notify(title: str, subtitle: str, body: str) -> None:
+    subprocess.run(  # nosec — hardcoded osascript, no user input
+        ["osascript", "-e",
+         f'display notification "{body[:200]}" with title "{title}" subtitle "{subtitle}"'],
+        capture_output=True, check=False,
+    )
+
+
+def _watch_pages_build(commit_sha: str) -> None:
+    """Poll GitHub Pages build status for commit_sha; notify if it errors."""
+    try:
+        slug = _gh_repo_slug()
+    except Exception:  # pylint: disable=broad-exception-caught
+        return
+    deadline = time.monotonic() + _PAGES_POLL_TIMEOUT
+    time.sleep(_PAGES_POLL_INTERVAL)
+    while time.monotonic() < deadline:
+        try:
+            out = subprocess.check_output(  # nosec
+                ["gh", "api", f"repos/{slug}/pages/builds",
+                 "--jq", ".[0] | {status, commit: .commit[:8], error: .error.message}"],
+                timeout=15,
+            )
+            build = json.loads(out)
+        except Exception:  # pylint: disable=broad-exception-caught
+            break
+        if build.get("commit") != commit_sha[:8]:
+            time.sleep(_PAGES_POLL_INTERVAL)
+            continue
+        status = build.get("status")
+        if status == "built":
+            log.info("Pages build succeeded for %s", commit_sha[:8])
+            return
+        if status == "errored":
+            msg = build.get("error") or "unknown error"
+            log.warning("Pages build failed for %s: %s", commit_sha[:8], msg)
+            _notify("Scanner", "Pages build failed", msg)
+            return
+        time.sleep(_PAGES_POLL_INTERVAL)
+    log.debug("Pages build watch timed out for %s", commit_sha[:8])
 
 
 def _push_to_gh_pages() -> None:
@@ -95,14 +149,11 @@ def _push_to_gh_pages() -> None:
             if result.returncode != 0:
                 stderr = result.stderr.decode(errors="replace").strip()
                 log.warning("gh-pages push failed (exit %d): %s", result.returncode, stderr)
-                subprocess.run(  # nosec — hardcoded osascript, no user input
-                    ["osascript", "-e",
-                     f'display notification "{stderr[:200]}" with title "Scanner" subtitle "gh-pages push failed"'],
-                    capture_output=True, check=False,
-                )
+                _notify("Scanner", "gh-pages push failed", stderr)
                 return
             _LAST_PUSH = time.time()
             log.info("Dashboard pushed to gh-pages")
+            threading.Thread(target=_watch_pages_build, args=(commit,), daemon=True).start()
         except Exception:  # pylint: disable=broad-exception-caught  # nosec B110 — best-effort push
             log.warning("gh-pages push skipped", exc_info=True)
 
