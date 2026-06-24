@@ -1,6 +1,7 @@
 """Generates a self-refreshing static HTML dashboard from the incidents database."""
 import json
 import logging
+from collections import defaultdict
 import subprocess  # nosec B404 — only used for git plumbing; no user input
 import threading
 import time
@@ -109,6 +110,57 @@ def _watch_pages_build(commit_sha: str) -> None:
     log.debug("Pages build watch timed out for %s", commit_sha[:8])
 
 
+_CATEGORY_ORDER = ["Criminal", "Medical", "Fire", "Traffic", "Misc"]
+
+_CATEGORY_KEYWORDS: list[tuple[str, list[str]]] = [
+    ("Fire", [
+        "house fire", "apartment fire", "brush fire", "car fire", "vehicle fire",
+        "electrical fire", "vehicle on fire",
+        "fire", "arson", "hazmat", "gas leak", "chemical", "electrical", "power line",
+        "power outage", "water main", "flood", "smoke", "carbon",
+    ]),
+    ("Medical", [
+        "medical", "ems", "overdose", "trauma", "seizure", "cit", "suicide", "suicidal",
+        "mental health", "mental", "psych", "welfare check", "wellness", "lift assist",
+        "injury", "inhalation", "doa", "death", "exposure", "self-harm", "self-inflicted",
+        "mobile crisis", "cardiac", "medic", "drug overdose",
+    ]),
+    ("Criminal", [
+        "assault", "shooting", "shot", "robbery", "burglary", "theft", "stabbing",
+        "homicide", "murder", "sexual", "domestic", "fight", "threat", "blackmail",
+        "weapon", "armed", "gun", "gsw", "carjacking", "kidnap", "vandal", "trespass",
+        "harass", "narcotic", "drug", "dui", "ovi", "warrant", "felony", "crime",
+        "break-in", "b&e", "breaking & e", "fraud", "aggravated", "child abuse",
+        "use of force", "disturbance", "pursuit", "shots", "gunfire", "gunshot",
+        "strangulation", "human trafficking", "missing", "arrest", "shoplifting",
+        "shoplifter", "hate crime", "sex offense",
+    ]),
+    ("Traffic", [
+        "accident", "collision", "crash", "mva", "mvc", "mca", "hit and run",
+        "hit & run", "hit-and-run", "hit & skip", "hit skip", "rollover",
+        "vehicle stop", "traffic stop", "traffic", "motorcycle", "pedestrian struck",
+        "car vs", "vehicle vs",
+    ]),
+]
+
+
+def _categorize(incident_type: str) -> str:
+    t = (incident_type or "").lower()
+    for category, keywords in _CATEGORY_KEYWORDS:
+        if any(k in t for k in keywords):
+            return category
+    return "Misc"
+
+
+_CATEGORY_STYLES: dict[str, tuple[str, str]] = {
+    "Criminal": ("#3b0f0f", "#f87171"),
+    "Medical":  ("#0d2a4a", "#7dd3fc"),
+    "Fire":     ("#3b1f00", "#fb923c"),
+    "Traffic":  ("#2a2a00", "#facc15"),
+    "Misc":     ("#1f2937", "#9ca3af"),
+}
+
+
 def _push_to_gh_pages() -> None:
     """Push dashboard.html to the gh-pages branch via git plumbing. Rate-limited."""
     global _LAST_PUSH  # pylint: disable=global-statement
@@ -197,21 +249,38 @@ def generate() -> None:
   {type_rows_html}
 </div>""" if by_type_sorted else ""
 
-    # --- Incidents table rows ---
-    rows_html = ""
+    # --- Incidents table rows grouped by category ---
+    by_cat: dict[str, list] = defaultdict(list)
     for r in recent:
-        ts = _fmt_time(r["created_at"])
-        itype = r.get("incident_type") or "—"
-        loc = r.get("location") or "—"
-        summary = r.get("summary", "")
-        posted = "✓" if r.get("posted") else "·"
-        rows_html += f"""<tr>
-  <td class="ts">{ts}</td>
-  <td><span class="badge">{itype}</span></td>
-  <td class="loc">{loc}</td>
-  <td class="summary">{summary}</td>
-  <td class="posted">{posted}</td>
-</tr>"""
+        by_cat[_categorize(r.get("incident_type") or "")].append(r)
+
+    rows_html = ""
+    for cat in _CATEGORY_ORDER:
+        cat_rows = by_cat.get(cat, [])
+        if not cat_rows:
+            continue
+        bg, fg = _CATEGORY_STYLES[cat]
+        rows_html += (
+            f'<tr class="cat-header">'
+            f'<td colspan="5" style="background:{bg};color:{fg}">{cat}</td>'
+            f'</tr>'
+        )
+        for r in cat_rows:
+            ts = _fmt_time(r["created_at"])
+            itype = r.get("incident_type") or "—"
+            loc = r.get("location") or "—"
+            summary = r.get("summary", "")
+            posted = "✓" if r.get("posted") else "·"
+            badge_bg, badge_fg = _CATEGORY_STYLES[cat]
+            rows_html += (
+                f'<tr>'
+                f'<td class="ts">{ts}</td>'
+                f'<td><span class="badge" style="background:{badge_bg};color:{badge_fg}">{itype}</span></td>'
+                f'<td class="loc">{loc}</td>'
+                f'<td class="summary">{summary}</td>'
+                f'<td class="posted">{posted}</td>'
+                f'</tr>'
+            )
 
     if not rows_html:
         rows_html = '<tr><td colspan="5" class="empty">No incidents in the last 7 days.</td></tr>'
@@ -258,6 +327,7 @@ tr:hover td{{background:#1f2333}}
 .summary{{color:#e0e0e0;line-height:1.4}}
 .posted{{text-align:center;color:#4ade80}}
 .empty{{text-align:center;color:#6b7280;padding:2rem}}
+.cat-header td{{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;padding:.4rem .75rem;border-bottom:1px solid #2d3147}}
 </style>
 </head>
 <body>
