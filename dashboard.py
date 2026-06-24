@@ -59,22 +59,29 @@ def _fmt_time(iso: str, fmt: str = "%H:%M %b %d") -> str:
         return iso
 
 
-def _pie_chart_svg(category_totals: list[tuple[str, int]]) -> str:
-    """Return an inline SVG donut chart + legend for the given category totals."""
+def _pie_svg(category_totals: list[tuple[str, int]], size: int = 220) -> str:
+    """Return a bare SVG donut element for the given category totals."""
     total = sum(c for _, c in category_totals if c)
     if not total:
         return ""
-
-    cx = cy = 100
-    r_outer, r_inner = 80, 44
+    cx = cy = size // 2
+    r_outer = int(size * 0.42)
+    r_inner = int(size * 0.24)
+    bg = "#0f1424"
     paths: list[str] = []
     angle = -math.pi / 2
-
     for cat, count in category_totals:
         if not count:
             continue
         _, fg = _CATEGORY_STYLES[cat]
         sweep = 2 * math.pi * count / total
+        if abs(sweep - 2 * math.pi) < 1e-9:
+            paths.append(
+                f'<circle cx="{cx}" cy="{cy}" r="{r_outer}" fill="{fg}"/>'
+                f'<circle cx="{cx}" cy="{cy}" r="{r_inner}" fill="{bg}"/>'
+            )
+            angle += sweep
+            continue
         x1 = cx + r_outer * math.cos(angle)
         y1 = cy + r_outer * math.sin(angle)
         xi1 = cx + r_inner * math.cos(angle)
@@ -85,35 +92,12 @@ def _pie_chart_svg(category_totals: list[tuple[str, int]]) -> str:
         xi2 = cx + r_inner * math.cos(angle)
         yi2 = cy + r_inner * math.sin(angle)
         large = 1 if sweep > math.pi else 0
-        if abs(sweep - 2 * math.pi) < 1e-9:  # full circle edge case
-            paths.append(
-                f'<circle cx="{cx}" cy="{cy}" r="{r_outer}" fill="{fg}" stroke="#0f1117" stroke-width="2"/>'
-                f'<circle cx="{cx}" cy="{cy}" r="{r_inner}" fill="#1a1d27"/>'
-            )
-        else:
-            paths.append(
-                f'<path d="M {x1:.2f} {y1:.2f} A {r_outer} {r_outer} 0 {large} 1 {x2:.2f} {y2:.2f} '
-                f'L {xi2:.2f} {yi2:.2f} A {r_inner} {r_inner} 0 {large} 0 {xi1:.2f} {yi1:.2f} Z" '
-                f'fill="{fg}" stroke="#0f1117" stroke-width="2"/>'
-            )
-
-    legend = "".join(
-        f'<div style="display:flex;align-items:center;gap:.5rem">'
-        f'<span style="width:10px;height:10px;border-radius:50%;background:{_CATEGORY_STYLES[cat][1]};flex-shrink:0"></span>'
-        f'<span style="color:#e0e0e0;font-size:.82rem;flex:1">{cat}</span>'
-        f'<span style="color:#9ca3af;font-size:.82rem;font-variant-numeric:tabular-nums">'
-        f'{count} &nbsp;{count/total*100:.0f}%</span>'
-        f'</div>'
-        for cat, count in category_totals if count
-    )
-
-    return (
-        f'<div style="display:flex;align-items:center;gap:2rem;flex-wrap:wrap;'
-        f'background:#1a1d27;border:1px solid #2d3147;border-radius:8px;padding:1rem 1.5rem;margin-bottom:1.5rem">'
-        f'<svg width="200" height="200" viewBox="0 0 200 200" style="flex-shrink:0">{"".join(paths)}</svg>'
-        f'<div style="display:flex;flex-direction:column;gap:.6rem;min-width:160px">{legend}</div>'
-        f'</div>'
-    )
+        paths.append(
+            f'<path d="M {x1:.1f} {y1:.1f} A {r_outer} {r_outer} 0 {large} 1 {x2:.1f} {y2:.1f} '
+            f'L {xi2:.1f} {yi2:.1f} A {r_inner} {r_inner} 0 {large} 0 {xi1:.1f} {yi1:.1f} Z" '
+            f'fill="{fg}" stroke="{bg}" stroke-width="2"/>'
+        )
+    return f'<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}">{"".join(paths)}</svg>'
 
 
 def _gh_repo_slug() -> str:
@@ -296,38 +280,64 @@ def generate() -> None:
         css = {"online": "pill-online", "offline": "pill-offline"}.get(status, "pill-unknown")
         pills_html += f'<span class="pill {css}">{icon} {_feed_label(url)}{since_str}</span>\n'
 
-    # --- By-type breakdown grouped by category ---
+    # --- By-type cards (top 8 per category + bar charts) ---
+    _BAR_LIMIT = 8
     by_type_cat: dict[str, list[tuple[str, int]]] = defaultdict(list)
     for t, c in by_type_sorted:
         by_type_cat[_categorize(t)].append((t, c))
 
-    by_type_sections = ""
+    cat_cards_html = ""
     for cat in _CATEGORY_ORDER:
         rows = by_type_cat.get(cat, [])
         if not rows:
             continue
-        bg, fg = _CATEGORY_STYLES[cat]
-        rows_inner = "".join(
-            f'<div class="type-row"><span>{t}</span><span class="type-count">{c}</span></div>'
-            for t, c in rows
-        )
+        _, fg = _CATEGORY_STYLES[cat]
         cat_total = sum(c for _, c in rows)
-        by_type_sections += (
-            f'<div class="type-cat-header" style="background:{bg};color:{fg}">'
-            f'{cat}<span class="type-cat-total">{cat_total}</span></div>'
-            f'{rows_inner}'
-        )
-    by_type_block = f"""
-<div class="by-type">
-  <div class="section-title">This week by type</div>
-  {by_type_sections}
-</div>""" if by_type_sorted else ""
+        max_count = rows[0][1] if rows else 1
+        visible = rows[:_BAR_LIMIT]
+        remainder = len(rows) - len(visible)
+        bar_rows = ""
+        for t, c in visible:
+            pct = int(c / max_count * 100)
+            bar_rows += (
+                f'<div class="bar-row">'
+                f'<span class="bar-label">{t}</span>'
+                f'<div class="bar-right">'
+                f'<div class="bar-track"><div class="bar-fill" style="width:{pct}%;background:{fg}"></div></div>'
+                f'<span class="bar-count">{c:,}</span>'
+                f'</div></div>'
+            )
+        more_html = f'<div class="bar-more">+{remainder} more types</div>' if remainder else ""
+        cat_cards_html += (
+            f'<div class="cat-card">'
+            f'<div class="cat-card-hdr" style="color:{fg};border-bottom-color:rgba({{}},{{}},{{}},0.15)">'
+            f'<span>{cat}</span><span class="cat-card-total">{cat_total:,}</span></div>'
+            f'<div class="cat-card-body">{bar_rows}{more_html}</div>'
+            f'</div>'
+        ).replace("{},{},{}", "255,255,255")
 
+    # --- Pie chart card ---
     cat_totals = [
         (cat, sum(c for _, c in by_type_cat.get(cat, [])))
         for cat in _CATEGORY_ORDER
     ]
-    pie_html = _pie_chart_svg(cat_totals)
+    total_incidents = sum(c for _, c in cat_totals)
+    pie_svg = _pie_svg(cat_totals, size=200)
+    legend_rows = "".join(
+        f'<div class="leg-row">'
+        f'<span class="leg-dot" style="background:{_CATEGORY_STYLES[cat][1]}"></span>'
+        f'<span class="leg-name">{cat}</span>'
+        f'<span class="leg-val">{count:,} &thinsp; {count/total_incidents*100:.0f}%</span>'
+        f'</div>'
+        for cat, count in cat_totals if count
+    ) if total_incidents else ""
+    pie_card = (
+        f'<div class="pie-card">'
+        f'<div class="pie-title">This week by category</div>'
+        f'<div class="pie-body">{pie_svg}'
+        f'<div class="pie-legend">{legend_rows}</div>'
+        f'</div></div>'
+    ) if pie_svg else ""
 
     # --- Incidents table rows grouped by category ---
     by_cat: dict[str, list] = defaultdict(list)
@@ -339,25 +349,23 @@ def generate() -> None:
         cat_rows = by_cat.get(cat, [])
         if not cat_rows:
             continue
-        bg, fg = _CATEGORY_STYLES[cat]
+        _, fg = _CATEGORY_STYLES[cat]
         rows_html += (
-            f'<tr class="cat-header">'
-            f'<td colspan="5" style="background:{bg};color:{fg}">{cat}</td>'
-            f'</tr>'
+            f'<tr class="cat-hdr"><td colspan="5" style="color:{fg};border-left:3px solid {fg}">'
+            f'{cat}</td></tr>'
         )
         for r in cat_rows:
             ts = _fmt_time(r["created_at"])
             itype = r.get("incident_type") or "—"
             loc = r.get("location") or "—"
             summary = r.get("summary", "")
-            posted = "✓" if r.get("posted") else "·"
-            badge_bg, badge_fg = _CATEGORY_STYLES[cat]
+            posted = '<span class="chk">✓</span>' if r.get("posted") else '<span class="dot">·</span>'
             rows_html += (
                 f'<tr>'
                 f'<td class="ts">{ts}</td>'
-                f'<td><span class="badge" style="background:{badge_bg};color:{badge_fg}">{itype}</span></td>'
+                f'<td><span class="badge" style="color:{fg}">{itype}</span></td>'
                 f'<td class="loc">{loc}</td>'
-                f'<td class="summary">{summary}</td>'
+                f'<td class="summ">{summary}</td>'
                 f'<td class="posted">{posted}</td>'
                 f'</tr>'
             )
@@ -377,75 +385,105 @@ def generate() -> None:
 <title>{COMMUNITY_NAME} Scanner</title>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
-body{{font-family:system-ui,-apple-system,sans-serif;background:#0f1117;color:#e0e0e0;padding:1.5rem}}
-h1{{font-size:1.4rem;font-weight:600;color:#fff}}
-.updated{{font-size:.75rem;color:#666;margin-top:.25rem}}
-.header{{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.5rem;flex-wrap:wrap;gap:.5rem}}
+:root{{--bg:#090d1a;--surf:#0f1424;--surf2:#141929;--bdr:rgba(255,255,255,0.07);--text:#e2e8f0;--muted:#64748b;--dim:#374151}}
+body{{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);padding:1.25rem 1.5rem;max-width:1400px;margin:0 auto}}
+/* Header */
+header{{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.5rem;gap:1rem;flex-wrap:wrap}}
+.title-row{{display:flex;align-items:center;gap:.6rem}}
+h1{{font-size:1.5rem;font-weight:700;color:#fff;letter-spacing:-.02em}}
+.live{{width:8px;height:8px;border-radius:50%;background:#4ade80;box-shadow:0 0 0 0 rgba(74,222,128,.5);animation:pulse 2s ease-in-out infinite;flex-shrink:0}}
+@keyframes pulse{{0%,100%{{box-shadow:0 0 0 0 rgba(74,222,128,.4)}}50%{{box-shadow:0 0 0 7px rgba(74,222,128,0)}}}}
+.updated{{font-size:.73rem;color:var(--muted);margin-top:.25rem}}
 .feeds{{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}}
-.pill{{padding:.3rem .75rem;border-radius:999px;font-size:.8rem;font-weight:500}}
-.pill-online{{background:#0d3320;color:#4ade80;border:1px solid #166534}}
-.pill-offline{{background:#3b0f0f;color:#f87171;border:1px solid #7f1d1d}}
-.pill-unknown{{background:#1f2937;color:#9ca3af;border:1px solid #374151}}
-.stats{{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem;margin-bottom:1.5rem}}
-.stat-card{{background:#1a1d27;border:1px solid #2d3147;border-radius:8px;padding:1rem}}
-.stat-label{{font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;color:#9ca3af;margin-bottom:.25rem}}
-.stat-value{{font-size:1.75rem;font-weight:700;color:#fff}}
-.stat-sub{{font-size:.75rem;color:#6b7280;margin-top:.25rem}}
-.section-title{{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;margin-bottom:.6rem}}
-.by-type{{background:#1a1d27;border:1px solid #2d3147;border-radius:8px;padding:1rem;margin-bottom:1.5rem}}
-.type-row{{display:flex;justify-content:space-between;padding:.3rem 0;font-size:.85rem;border-bottom:1px solid #1f2333}}
-.type-row:last-child{{border-bottom:none}}
-.type-count{{color:#9ca3af}}
-table{{width:100%;border-collapse:collapse;background:#1a1d27;border:1px solid #2d3147;border-radius:8px;overflow:hidden;font-size:.85rem}}
-th{{background:#0f1117;color:#9ca3af;font-weight:500;text-align:left;padding:.6rem .75rem;border-bottom:1px solid #2d3147;font-size:.72rem;text-transform:uppercase;letter-spacing:.04em}}
-td{{padding:.6rem .75rem;border-bottom:1px solid #1f2333;vertical-align:top}}
-tr:last-child td{{border-bottom:none}}
-tr:hover td{{background:#1f2333}}
-.ts{{color:#9ca3af;white-space:nowrap}}
-.badge{{background:#1e3a5f;color:#7dd3fc;padding:.15rem .5rem;border-radius:4px;font-size:.75rem;white-space:nowrap}}
-.loc{{color:#d1d5db;white-space:nowrap}}
-.summary{{color:#e0e0e0;line-height:1.4}}
-.posted{{text-align:center;color:#4ade80}}
-.empty{{text-align:center;color:#6b7280;padding:2rem}}
-.cat-header td{{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;padding:.4rem .75rem;border-bottom:1px solid #2d3147}}
-.type-cat-header{{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;padding:.35rem .5rem;margin:.4rem -.5rem 0;border-radius:4px;display:flex;justify-content:space-between}}
-.type-cat-total{{font-variant-numeric:tabular-nums}}
+.pill{{padding:.25rem .7rem;border-radius:999px;font-size:.78rem;font-weight:500;border:1px solid}}
+.pill-online{{background:rgba(74,222,128,.08);color:#4ade80;border-color:rgba(74,222,128,.2)}}
+.pill-offline{{background:rgba(248,113,113,.08);color:#f87171;border-color:rgba(248,113,113,.2)}}
+.pill-unknown{{background:rgba(156,163,175,.08);color:#94a3b8;border-color:rgba(156,163,175,.15)}}
+/* Top row: stats + pie */
+.top-row{{display:grid;grid-template-columns:1fr auto;gap:1rem;margin-bottom:1.25rem;align-items:start}}
+.stats{{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem}}
+.stat-card{{background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:1.1rem 1.25rem;border-top:3px solid}}
+.stat-label{{font-size:.67rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin-bottom:.5rem}}
+.stat-value{{font-size:2.1rem;font-weight:800;color:#fff;line-height:1;font-variant-numeric:tabular-nums}}
+.stat-sub{{font-size:.7rem;color:var(--dim);margin-top:.4rem}}
+/* Pie card */
+.pie-card{{background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:1.1rem 1.25rem}}
+.pie-title{{font-size:.67rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin-bottom:.85rem}}
+.pie-body{{display:flex;align-items:center;gap:1.5rem}}
+.pie-legend{{display:flex;flex-direction:column;gap:.55rem}}
+.leg-row{{display:flex;align-items:center;gap:.55rem}}
+.leg-dot{{width:9px;height:9px;border-radius:50%;flex-shrink:0}}
+.leg-name{{font-size:.82rem;color:var(--text);flex:1;min-width:70px}}
+.leg-val{{font-size:.8rem;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}}
+/* By-type grid */
+.section-lbl{{font-size:.67rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin-bottom:.75rem}}
+.by-type-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1rem;margin-bottom:1.25rem}}
+.cat-card{{background:var(--surf);border:1px solid var(--bdr);border-radius:12px;overflow:hidden}}
+.cat-card-hdr{{display:flex;justify-content:space-between;align-items:center;padding:.6rem 1rem;font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.09em;border-bottom:1px solid var(--bdr)}}
+.cat-card-total{{font-variant-numeric:tabular-nums;font-size:.85rem}}
+.cat-card-body{{padding:.6rem .9rem}}
+.bar-row{{display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:center;padding:.28rem 0;border-bottom:1px solid rgba(255,255,255,.04)}}
+.bar-row:last-of-type{{border-bottom:none}}
+.bar-label{{font-size:.79rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+.bar-right{{display:flex;align-items:center;gap:.5rem}}
+.bar-track{{width:64px;height:5px;background:rgba(255,255,255,.08);border-radius:3px;flex-shrink:0}}
+.bar-fill{{height:5px;border-radius:3px;min-width:2px}}
+.bar-count{{font-size:.74rem;color:var(--muted);font-variant-numeric:tabular-nums;min-width:26px;text-align:right}}
+.bar-more{{font-size:.72rem;color:var(--dim);padding:.4rem 0 .05rem}}
+/* Incidents table */
+table{{width:100%;border-collapse:collapse;background:var(--surf);border:1px solid var(--bdr);border-radius:12px;overflow:hidden;font-size:.84rem}}
+thead th{{background:var(--surf2);color:var(--muted);font-weight:600;text-align:left;padding:.65rem 1rem;font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid var(--bdr);position:sticky;top:0;z-index:1}}
+td{{padding:.65rem 1rem;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:top}}
+tbody tr:not(.cat-hdr):hover td{{background:rgba(255,255,255,.025)}}
+.cat-hdr td{{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;padding:.45rem 1rem;background:rgba(255,255,255,.03);border-bottom:1px solid var(--bdr)}}
+.ts{{color:var(--muted);white-space:nowrap;font-size:.78rem}}
+.badge{{display:inline-block;padding:.18rem .55rem;border-radius:5px;font-size:.72rem;font-weight:600;white-space:nowrap;background:rgba(255,255,255,.06)}}
+.loc{{color:#cbd5e1;font-size:.82rem;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+.summ{{color:var(--text);line-height:1.45}}
+.posted{{text-align:center;width:44px}}
+.chk{{color:#4ade80;font-size:.9rem}}
+.dot{{color:var(--dim)}}
+.empty{{text-align:center;color:var(--muted);padding:2.5rem}}
+@media(max-width:900px){{.top-row{{grid-template-columns:1fr}}}}
+@media(max-width:600px){{.stats{{grid-template-columns:1fr 1fr}}.loc{{max-width:100px}}}}
 </style>
 </head>
 <body>
-<div class="header">
+<header>
   <div>
-    <h1>{COMMUNITY_NAME} Scanner</h1>
+    <div class="title-row"><div class="live"></div><h1>{COMMUNITY_NAME} Scanner</h1></div>
     <div class="updated">Updated {updated} &middot; refreshes every 60s</div>
   </div>
   <div class="feeds">{pills_html}</div>
+</header>
+
+<div class="top-row">
+  <div class="stats">
+    <div class="stat-card" style="border-top-color:#f87171">
+      <div class="stat-label">Today</div>
+      <div class="stat-value">{len(today):,}</div>
+      <div class="stat-sub">incidents logged</div>
+    </div>
+    <div class="stat-card" style="border-top-color:#60a5fa">
+      <div class="stat-label">This Week</div>
+      <div class="stat-value">{len(week):,}</div>
+      <div class="stat-sub">incidents logged</div>
+    </div>
+    <div class="stat-card" style="border-top-color:#4ade80">
+      <div class="stat-label">Last Incident</div>
+      <div class="stat-value" style="font-size:1.2rem;margin-top:.15rem">{last_str}</div>
+    </div>
+  </div>
+  {pie_card}
 </div>
 
-<div class="stats">
-  <div class="stat-card">
-    <div class="stat-label">Today</div>
-    <div class="stat-value">{len(today)}</div>
-    <div class="stat-sub">incidents</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">This Week</div>
-    <div class="stat-value">{len(week)}</div>
-    <div class="stat-sub">incidents</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">Last Incident</div>
-    <div class="stat-value" style="font-size:1.1rem;padding-top:.4rem">{last_str}</div>
-  </div>
-</div>
+<div class="section-lbl">This week by type</div>
+<div class="by-type-grid">{cat_cards_html}</div>
 
-{by_type_block}
-
-{pie_html}
-
-<div class="section-title" style="margin-bottom:.6rem">Recent incidents (last 7 days)</div>
+<div class="section-lbl" style="margin-bottom:.75rem">Recent incidents &mdash; last 7 days</div>
 <table>
 <thead><tr>
-  <th>Time</th><th>Type</th><th>Location</th><th>Summary</th><th>Posted</th>
+  <th>Time</th><th>Type</th><th>Location</th><th>Summary</th><th></th>
 </tr></thead>
 <tbody>
 {rows_html}
