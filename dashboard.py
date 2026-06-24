@@ -238,15 +238,29 @@ def generate() -> None:
         css = {"online": "pill-online", "offline": "pill-offline"}.get(status, "pill-unknown")
         pills_html += f'<span class="pill {css}">{icon} {_feed_label(url)}{since_str}</span>\n'
 
-    # --- By-type breakdown ---
-    type_rows_html = "".join(
-        f'<div class="type-row"><span>{t}</span><span class="type-count">{c}</span></div>'
-        for t, c in by_type_sorted
-    )
+    # --- By-type breakdown grouped by category ---
+    by_type_cat: dict[str, list[tuple[str, int]]] = defaultdict(list)
+    for t, c in by_type_sorted:
+        by_type_cat[_categorize(t)].append((t, c))
+
+    by_type_sections = ""
+    for cat in _CATEGORY_ORDER:
+        rows = by_type_cat.get(cat, [])
+        if not rows:
+            continue
+        bg, fg = _CATEGORY_STYLES[cat]
+        rows_inner = "".join(
+            f'<div class="type-row"><span>{t}</span><span class="type-count">{c}</span></div>'
+            for t, c in rows
+        )
+        by_type_sections += (
+            f'<div class="type-cat-header" style="background:{bg};color:{fg}">{cat}</div>'
+            f'{rows_inner}'
+        )
     by_type_block = f"""
 <div class="by-type">
   <div class="section-title">This week by type</div>
-  {type_rows_html}
+  {by_type_sections}
 </div>""" if by_type_sorted else ""
 
     # --- Incidents table rows grouped by category ---
@@ -328,6 +342,7 @@ tr:hover td{{background:#1f2333}}
 .posted{{text-align:center;color:#4ade80}}
 .empty{{text-align:center;color:#6b7280;padding:2rem}}
 .cat-header td{{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;padding:.4rem .75rem;border-bottom:1px solid #2d3147}}
+.type-cat-header{{font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;padding:.35rem .5rem;margin:.4rem -.5rem 0;border-radius:4px}}
 </style>
 </head>
 <body>
