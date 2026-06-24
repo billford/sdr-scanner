@@ -1,6 +1,7 @@
 """Generates a self-refreshing static HTML dashboard from the incidents database."""
 import json
 import logging
+import math
 from collections import defaultdict
 import subprocess  # nosec B404 — only used for git plumbing; no user input
 import threading
@@ -56,6 +57,63 @@ def _fmt_time(iso: str, fmt: str = "%H:%M %b %d") -> str:
         return datetime.fromisoformat(iso).astimezone().strftime(fmt)
     except Exception:  # pylint: disable=broad-exception-caught  # nosec B110 — return raw string on parse failure
         return iso
+
+
+def _pie_chart_svg(category_totals: list[tuple[str, int]]) -> str:
+    """Return an inline SVG donut chart + legend for the given category totals."""
+    total = sum(c for _, c in category_totals if c)
+    if not total:
+        return ""
+
+    cx = cy = 100
+    r_outer, r_inner = 80, 44
+    paths: list[str] = []
+    angle = -math.pi / 2
+
+    for cat, count in category_totals:
+        if not count:
+            continue
+        _, fg = _CATEGORY_STYLES[cat]
+        sweep = 2 * math.pi * count / total
+        x1 = cx + r_outer * math.cos(angle)
+        y1 = cy + r_outer * math.sin(angle)
+        xi1 = cx + r_inner * math.cos(angle)
+        yi1 = cy + r_inner * math.sin(angle)
+        angle += sweep
+        x2 = cx + r_outer * math.cos(angle)
+        y2 = cy + r_outer * math.sin(angle)
+        xi2 = cx + r_inner * math.cos(angle)
+        yi2 = cy + r_inner * math.sin(angle)
+        large = 1 if sweep > math.pi else 0
+        if abs(sweep - 2 * math.pi) < 1e-9:  # full circle edge case
+            paths.append(
+                f'<circle cx="{cx}" cy="{cy}" r="{r_outer}" fill="{fg}" stroke="#0f1117" stroke-width="2"/>'
+                f'<circle cx="{cx}" cy="{cy}" r="{r_inner}" fill="#1a1d27"/>'
+            )
+        else:
+            paths.append(
+                f'<path d="M {x1:.2f} {y1:.2f} A {r_outer} {r_outer} 0 {large} 1 {x2:.2f} {y2:.2f} '
+                f'L {xi2:.2f} {yi2:.2f} A {r_inner} {r_inner} 0 {large} 0 {xi1:.2f} {yi1:.2f} Z" '
+                f'fill="{fg}" stroke="#0f1117" stroke-width="2"/>'
+            )
+
+    legend = "".join(
+        f'<div style="display:flex;align-items:center;gap:.5rem">'
+        f'<span style="width:10px;height:10px;border-radius:50%;background:{_CATEGORY_STYLES[cat][1]};flex-shrink:0"></span>'
+        f'<span style="color:#e0e0e0;font-size:.82rem;flex:1">{cat}</span>'
+        f'<span style="color:#9ca3af;font-size:.82rem;font-variant-numeric:tabular-nums">'
+        f'{count} &nbsp;{count/total*100:.0f}%</span>'
+        f'</div>'
+        for cat, count in category_totals if count
+    )
+
+    return (
+        f'<div style="display:flex;align-items:center;gap:2rem;flex-wrap:wrap;'
+        f'background:#1a1d27;border:1px solid #2d3147;border-radius:8px;padding:1rem 1.5rem;margin-bottom:1.5rem">'
+        f'<svg width="200" height="200" viewBox="0 0 200 200" style="flex-shrink:0">{"".join(paths)}</svg>'
+        f'<div style="display:flex;flex-direction:column;gap:.6rem;min-width:160px">{legend}</div>'
+        f'</div>'
+    )
 
 
 def _gh_repo_slug() -> str:
@@ -265,6 +323,12 @@ def generate() -> None:
   {by_type_sections}
 </div>""" if by_type_sorted else ""
 
+    cat_totals = [
+        (cat, sum(c for _, c in by_type_cat.get(cat, [])))
+        for cat in _CATEGORY_ORDER
+    ]
+    pie_html = _pie_chart_svg(cat_totals)
+
     # --- Incidents table rows grouped by category ---
     by_cat: dict[str, list] = defaultdict(list)
     for r in recent:
@@ -375,6 +439,8 @@ tr:hover td{{background:#1f2333}}
 </div>
 
 {by_type_block}
+
+{pie_html}
 
 <div class="section-title" style="margin-bottom:.6rem">Recent incidents (last 7 days)</div>
 <table>
