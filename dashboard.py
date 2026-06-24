@@ -113,12 +113,6 @@ def _watch_pages_build(commit_sha: str) -> None:
 _CATEGORY_ORDER = ["Criminal", "Medical", "Fire", "Traffic", "Misc"]
 
 _CATEGORY_KEYWORDS: list[tuple[str, list[str]]] = [
-    ("Fire", [
-        "house fire", "apartment fire", "brush fire", "car fire", "vehicle fire",
-        "electrical fire", "vehicle on fire",
-        "fire", "arson", "hazmat", "gas leak", "chemical", "electrical", "power line",
-        "power outage", "water main", "flood", "smoke", "carbon",
-    ]),
     ("Medical", [
         "medical", "ems", "overdose", "trauma", "seizure", "cit", "suicide", "suicidal",
         "mental health", "mental", "psych", "welfare check", "wellness", "lift assist",
@@ -126,14 +120,20 @@ _CATEGORY_KEYWORDS: list[tuple[str, list[str]]] = [
         "mobile crisis", "cardiac", "medic", "drug overdose",
     ]),
     ("Criminal", [
-        "assault", "shooting", "shot", "robbery", "burglary", "theft", "stabbing",
+        "assault", "shooting", "shot", "shots", "robbery", "burglary", "theft", "stabbing",
         "homicide", "murder", "sexual", "domestic", "fight", "threat", "blackmail",
         "weapon", "armed", "gun", "gsw", "carjacking", "kidnap", "vandal", "trespass",
         "harass", "narcotic", "drug", "dui", "ovi", "warrant", "felony", "crime",
         "break-in", "b&e", "breaking & e", "fraud", "aggravated", "child abuse",
-        "use of force", "disturbance", "pursuit", "shots", "gunfire", "gunshot",
+        "use of force", "disturbance", "pursuit", "gunfire", "gunshot",
         "strangulation", "human trafficking", "missing", "arrest", "shoplifting",
         "shoplifter", "hate crime", "sex offense",
+    ]),
+    ("Fire", [
+        "house fire", "apartment fire", "brush fire", "car fire", "vehicle fire",
+        "electrical fire", "vehicle on fire",
+        "fire", "arson", "hazmat", "gas leak", "chemical", "electrical", "power line",
+        "power outage", "water main", "flood", "smoke", "carbon",
     ]),
     ("Traffic", [
         "accident", "collision", "crash", "mva", "mvc", "mca", "hit and run",
