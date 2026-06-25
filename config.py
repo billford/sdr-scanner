@@ -39,6 +39,8 @@ DB_PATH = "incidents.db"
 QUEUE_FILE = "post_queue.json"
 TEXT_OUTPUT_FILE = os.getenv("TEXT_OUTPUT_FILE", "incidents.txt")
 ZAPIER_WEBHOOK_URL = os.getenv("ZAPIER_WEBHOOK_URL", "")
+FB_PAGE_ID = os.getenv("FB_PAGE_ID", "")
+FB_PAGE_ACCESS_TOKEN = os.getenv("FB_PAGE_ACCESS_TOKEN", "")
 
 # Ollama classifier (via olla proxy)
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")

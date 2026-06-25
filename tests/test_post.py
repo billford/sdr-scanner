@@ -176,6 +176,58 @@ def test_post_zapier_http_error_raises(incident, monkeypatch):
             post.post_incident(incident)
 
 
+# ── facebook backend ──────────────────────────────────────────────────────────
+
+def test_post_facebook_success(incident, monkeypatch):
+    monkeypatch.setattr(post, "POST_BACKEND", "facebook")
+    monkeypatch.setattr(post, "FB_PAGE_ID", "123456789")
+    monkeypatch.setattr(post, "FB_PAGE_ACCESS_TOKEN", "EAAtest")
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+    mock_resp.json.return_value = {"id": "123456789_987"}
+
+    with patch("post.requests.post", return_value=mock_resp) as mock_post:
+        result = post.post_incident(incident)
+
+    assert result == "123456789_987"
+    mock_post.assert_called_once()
+    data = mock_post.call_args.kwargs["data"]
+    assert data["message"] == incident["summary"]
+    assert data["access_token"] == "EAAtest"
+
+
+def test_post_facebook_missing_credentials(incident, monkeypatch):
+    monkeypatch.setattr(post, "POST_BACKEND", "facebook")
+    monkeypatch.setattr(post, "FB_PAGE_ID", "")
+    monkeypatch.setattr(post, "FB_PAGE_ACCESS_TOKEN", "")
+    result = post.post_incident(incident)
+    assert result == ""
+
+
+def test_post_facebook_network_error_raises(incident, monkeypatch):
+    monkeypatch.setattr(post, "POST_BACKEND", "facebook")
+    monkeypatch.setattr(post, "FB_PAGE_ID", "123456789")
+    monkeypatch.setattr(post, "FB_PAGE_ACCESS_TOKEN", "EAAtest")
+
+    with patch("post.requests.post", side_effect=ConnectionError("Network error")):
+        with pytest.raises(ConnectionError):
+            post.post_incident(incident)
+
+
+def test_post_facebook_http_error_raises(incident, monkeypatch):
+    monkeypatch.setattr(post, "POST_BACKEND", "facebook")
+    monkeypatch.setattr(post, "FB_PAGE_ID", "123456789")
+    monkeypatch.setattr(post, "FB_PAGE_ACCESS_TOKEN", "EAAtest")
+
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.side_effect = Exception("HTTP 400")
+
+    with patch("post.requests.post", return_value=mock_resp):
+        with pytest.raises(Exception, match="HTTP 400"):
+            post.post_incident(incident)
+
+
 # ── print backend ─────────────────────────────────────────────────────────────
 
 def test_post_print_outputs_summary(incident, monkeypatch, capsys):

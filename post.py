@@ -1,9 +1,10 @@
 """
-Posting layer — three backends selectable via POST_BACKEND env var:
-  queue   — write to local JSON queue file (default, safe for testing)
-  text    — append plain-text log to TEXT_OUTPUT_FILE (default: incidents.txt)
-  zapier  — POST incident JSON to a Zapier Catch Hook webhook URL
-  print   — stdout only (debug)
+Posting layer — backends selectable via POST_BACKEND env var:
+  queue    — write to local JSON queue file (default, safe for testing)
+  text     — append plain-text log to TEXT_OUTPUT_FILE (default: incidents.txt)
+  zapier   — POST incident JSON to a Zapier Catch Hook webhook URL
+  facebook — post directly to a Facebook Page via the Graph API
+  print    — stdout only (debug)
 """
 import json
 import logging
@@ -14,6 +15,7 @@ from pathlib import Path
 import requests
 
 from config import ZAPIER_WEBHOOK_URL
+from config import FB_PAGE_ID, FB_PAGE_ACCESS_TOKEN  # module-level so tests can patch
 from config import QUEUE_FILE, TEXT_OUTPUT_FILE  # module-level so tests can patch
 
 log = logging.getLogger(__name__)
@@ -27,6 +29,8 @@ def post_incident(incident: dict) -> str:
 
     if backend == "zapier":
         return _post_zapier(incident)
+    if backend == "facebook":
+        return _post_facebook(incident)
     if backend == "text":
         return _post_text(incident)
     if backend == "print":
@@ -56,6 +60,27 @@ def _post_zapier(incident: dict) -> str:
         return ""
     except requests.RequestException as exc:
         log.error("Zapier webhook failed: %s", exc)
+        raise
+
+
+def _post_facebook(incident: dict) -> str:
+    if not FB_PAGE_ID or not FB_PAGE_ACCESS_TOKEN:
+        log.error("FB_PAGE_ID and FB_PAGE_ACCESS_TOKEN must be set for facebook backend")
+        return ""
+
+    url = f"https://graph.facebook.com/v21.0/{FB_PAGE_ID}/feed"
+    try:
+        resp = requests.post(
+            url,
+            data={"message": incident["summary"], "access_token": FB_PAGE_ACCESS_TOKEN},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        post_id = resp.json().get("id", "")
+        log.info("Posted to Facebook (%s): %s", post_id, incident["summary"][:80])
+        return post_id
+    except requests.RequestException as exc:
+        log.error("Facebook post failed: %s", exc)
         raise
 
 
