@@ -18,7 +18,8 @@ DASHBOARD_FILE = Path("dashboard.html")
 _status_lock = threading.Lock()
 _push_lock = threading.Lock()
 _LAST_PUSH: float = 0.0
-_PUSH_INTERVAL = 300  # push to gh-pages at most once every 5 minutes
+_PUSH_INTERVAL = 420  # push to gh-pages at most once every 7 minutes — GitHub Pages'
+                       # legacy build pipeline throttles/fails builds past ~10/hour
 _PAGES_POLL_INTERVAL = 15   # seconds between build status checks
 _PAGES_POLL_TIMEOUT = 120   # give up waiting after this many seconds
 
