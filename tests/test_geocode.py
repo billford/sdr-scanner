@@ -49,6 +49,16 @@ def test_geocode_query_appends_community_name_when_absent(tmp_db):
     assert "Cleveland" in requested_url
 
 
+def test_geocode_restricts_to_local_viewbox(tmp_db):
+    with patch("urllib.request.urlopen", return_value=_fake_response(
+        [{"lat": "41.499", "lon": "-81.694"}]
+    )) as mock_open:
+        geocode.geocode("Main St")
+    requested_url = mock_open.call_args[0][0].full_url
+    assert "bounded=1" in requested_url
+    assert "viewbox=" in requested_url
+
+
 def test_geocode_returns_coordinates(tmp_db):
     with patch("urllib.request.urlopen", return_value=_fake_response(
         [{"lat": "41.499", "lon": "-81.694"}]

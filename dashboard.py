@@ -10,7 +10,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import db
-from config import BROADCASTIFY_FEED_URLS, COMMUNITY_NAME
+from config import (
+    BROADCASTIFY_FEED_URLS, COMMUNITY_NAME,
+    MAP_CENTER_LAT, MAP_CENTER_LON, MAP_DEFAULT_ZOOM, MAP_MAX_BOUNDS,
+)
 
 STREAM_STATUS_FILE = Path("stream_status.json")
 DASHBOARD_FILE = Path("dashboard.html")
@@ -396,6 +399,8 @@ def generate() -> None:
         for r in mapped
     ]
     map_points_json = json.dumps(map_points)
+    _south, _west, _north, _east = (float(x) for x in MAP_MAX_BOUNDS.split(","))
+    map_max_bounds_json = json.dumps([[_south, _west], [_north, _east]])
     map_coverage = (
         f"Showing location for {len(mapped):,} of {len(recent):,} incidents this week "
         f"&mdash; not every dispatch includes a mappable location, so this map is a partial "
@@ -547,16 +552,20 @@ tbody tr:not(.cat-hdr):hover td{{background:rgba(255,255,255,.025)}}
 <script>
 (function() {{
   var points = {map_points_json};
+  var maxBounds = {map_max_bounds_json};
   var mapEl = document.getElementById('incident-map');
-  if (!points.length) {{
-    mapEl.innerHTML = '<div class="empty">No mappable incidents in the last 7 days.</div>';
-    return;
-  }}
-  var map = L.map('incident-map', {{scrollWheelZoom: false}});
+  var map = L.map('incident-map', {{
+    scrollWheelZoom: false,
+    maxBounds: maxBounds,
+    maxBoundsViscosity: 0.8,
+  }}).setView([{MAP_CENTER_LAT}, {MAP_CENTER_LON}], {MAP_DEFAULT_ZOOM});
   L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
     attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
     maxZoom: 19,
   }}).addTo(map);
+  if (!points.length) {{
+    return;
+  }}
   var markers = [];
   points.forEach(function(p) {{
     var marker = L.circleMarker([p.lat, p.lon], {{
@@ -569,7 +578,8 @@ tbody tr:not(.cat-hdr):hover td{{background:rgba(255,255,255,.025)}}
     marker.addTo(map);
     markers.push(marker);
   }});
-  map.fitBounds(L.featureGroup(markers).getBounds().pad(0.15));
+  // Cap maxZoom so a single incident (or a tight cluster) doesn't zoom to street level.
+  map.fitBounds(L.featureGroup(markers).getBounds().pad(0.15), {{maxZoom: {MAP_DEFAULT_ZOOM + 3}}});
 }})();
 </script>
 </body>

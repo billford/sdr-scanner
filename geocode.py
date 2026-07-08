@@ -16,7 +16,7 @@ import urllib.parse
 import urllib.request
 
 import db
-from config import COMMUNITY_NAME
+from config import COMMUNITY_NAME, GEOCODE_VIEWBOX
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +60,8 @@ def _lookup(location: str) -> tuple[float, float] | None:
         "format": "json",
         "limit": 1,
         "countrycodes": "us",
+        "viewbox": GEOCODE_VIEWBOX,
+        "bounded": 1,
     })
 
     with _rate_lock:

@@ -17,6 +17,17 @@ COMMUNITY_DESC = os.getenv(
     "Cleveland and surrounding Cuyahoga County communities",
 )
 
+# Bounding box (left,top,right,bottom = min_lon,max_lat,max_lon,min_lat) covering
+# Greater Cleveland / Cuyahoga County. Geocoding is hard-restricted to this box so
+# an ambiguous street name can't resolve to, e.g., Cleveland, TN or Cleveland, MS.
+GEOCODE_VIEWBOX = os.getenv("GEOCODE_VIEWBOX", "-82.05,41.66,-81.35,41.28")
+MAP_CENTER_LAT = float(os.getenv("MAP_CENTER_LAT", "41.4993"))
+MAP_CENTER_LON = float(os.getenv("MAP_CENTER_LON", "-81.6944"))
+MAP_DEFAULT_ZOOM = int(os.getenv("MAP_DEFAULT_ZOOM", "11"))
+# How far the dashboard map can be panned/zoomed out — south,west,north,east.
+# Looser than GEOCODE_VIEWBOX on purpose, just to keep neighboring-state context off-screen.
+MAP_MAX_BOUNDS = os.getenv("MAP_MAX_BOUNDS", "40.95,-82.60,42.05,-80.90")
+
 def _parse_feed_urls() -> list[str]:
     raw = os.getenv("BROADCASTIFY_FEED_URLS") or os.getenv("BROADCASTIFY_FEED_URL", "")
     if raw:
