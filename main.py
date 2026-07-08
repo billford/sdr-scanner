@@ -128,7 +128,7 @@ def main():
         # Stage 3: Claude polish (API — only hits here on real incidents)
         incident = summarize.polish(incident)
 
-        coords = geocode.geocode(incident.get("location"))
+        coords = geocode.geocode(incident.get("geo_location") or incident.get("location"))
         if coords:
             incident["lat"], incident["lon"] = coords
 

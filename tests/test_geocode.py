@@ -28,6 +28,25 @@ def test_geocode_none_for_empty_location(tmp_db):
 def test_geocode_none_for_unknown_location(tmp_db):
     assert geocode.geocode("unknown") is None
     assert geocode.geocode("N/A") is None
+    assert geocode.geocode("NONE") is None
+
+
+def test_geocode_query_omits_duplicate_community_name(tmp_db):
+    with patch("urllib.request.urlopen", return_value=_fake_response(
+        [{"lat": "41.499", "lon": "-81.694"}]
+    )) as mock_open:
+        geocode.geocode("West 100th Street, Cleveland, OH")
+    requested_url = mock_open.call_args[0][0].full_url
+    assert requested_url.count("Cleveland") == 1
+
+
+def test_geocode_query_appends_community_name_when_absent(tmp_db):
+    with patch("urllib.request.urlopen", return_value=_fake_response(
+        [{"lat": "41.499", "lon": "-81.694"}]
+    )) as mock_open:
+        geocode.geocode("123 Main St")
+    requested_url = mock_open.call_args[0][0].full_url
+    assert "Cleveland" in requested_url
 
 
 def test_geocode_returns_coordinates(tmp_db):

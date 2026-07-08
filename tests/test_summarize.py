@@ -69,6 +69,50 @@ def test_polish_api_error_falls_back_to_local(tmp_db, monkeypatch):
     assert result["summary"] == incident["summary"]
 
 
+def test_polish_parses_post_and_geo_lines(tmp_db, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    import summarize, config
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "sk-ant-test")
+    monkeypatch.setattr(summarize, "ANTHROPIC_API_KEY", "sk-ant-test")
+    summarize._CLIENT = None
+
+    response = (
+        "POST: [14:32] Structure Fire — West 100th Street area — "
+        "Engine 3 responded to a working fire.\n"
+        "GEO: West 100th Street, Cleveland, OH"
+    )
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = _mock_claude_response(response)
+
+    with patch("summarize.anthropic.Anthropic", return_value=mock_client):
+        summarize._CLIENT = None
+        result = summarize.polish(_make_incident())
+
+    assert result["summary"] == (
+        "[14:32] Structure Fire — West 100th Street area — "
+        "Engine 3 responded to a working fire."
+    )
+    assert result["geo_location"] == "West 100th Street, Cleveland, OH"
+
+
+def test_polish_geo_none_omits_geo_location(tmp_db, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    import summarize, config
+    monkeypatch.setattr(config, "ANTHROPIC_API_KEY", "sk-ant-test")
+    monkeypatch.setattr(summarize, "ANTHROPIC_API_KEY", "sk-ant-test")
+    summarize._CLIENT = None
+
+    response = "POST: [14:32] Disturbance — Cleveland area — Report of a disturbance.\nGEO: NONE"
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = _mock_claude_response(response)
+
+    with patch("summarize.anthropic.Anthropic", return_value=mock_client):
+        summarize._CLIENT = None
+        result = summarize.polish(_make_incident())
+
+    assert "geo_location" not in result
+
+
 def test_polish_does_not_mutate_original(tmp_db, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     import summarize, config

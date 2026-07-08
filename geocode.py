@@ -28,7 +28,7 @@ _RATE_LIMIT_SECONDS = 1.1
 _rate_lock = threading.Lock()
 _LAST_REQUEST = 0.0
 
-_UNRESOLVABLE = re.compile(r"^\s*(unknown|n/?a|—|-)?\s*$", re.IGNORECASE)
+_UNRESOLVABLE = re.compile(r"^\s*(unknown|none|n/?a|—|-)?\s*$", re.IGNORECASE)
 
 
 def geocode(location: str | None) -> tuple[float, float] | None:
@@ -49,7 +49,12 @@ def geocode(location: str | None) -> tuple[float, float] | None:
 
 
 def _lookup(location: str) -> tuple[float, float] | None:
-    query = f"{location}, {COMMUNITY_NAME}"
+    # Claude's geo_location is often already a full "street, city, state" query —
+    # only append the community name when it isn't already part of the string.
+    if COMMUNITY_NAME.lower() in location.lower():
+        query = location
+    else:
+        query = f"{location}, {COMMUNITY_NAME}"
     params = urllib.parse.urlencode({
         "q": query,
         "format": "json",
