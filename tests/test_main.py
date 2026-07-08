@@ -82,6 +82,7 @@ def base_mocks(monkeypatch):
         "mark_posted": MagicMock(),
         "post_incident": MagicMock(return_value=""),
         "recent_incidents": MagicMock(return_value=[]),
+        "geocode": MagicMock(return_value=None),
     }
     return mocks
 
@@ -97,6 +98,7 @@ def _run_main_with_chunks(chunks, mocks):
          patch("main.db.log_chunk", mocks["log_chunk"]), \
          patch("main.classify.local_classify", mocks["local_classify"]), \
          patch("main.summarize.polish", mocks["polish"]), \
+         patch("main.geocode.geocode", mocks["geocode"]), \
          patch("main.db.save_incident", mocks["save_incident"]), \
          patch("main.db.mark_posted", mocks["mark_posted"]), \
          patch("main.post.post_incident", mocks["post_incident"]), \

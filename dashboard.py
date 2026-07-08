@@ -374,6 +374,27 @@ def generate() -> None:
     if not rows_html:
         rows_html = '<tr><td colspan="5" class="empty">No incidents in the last 7 days.</td></tr>'
 
+    # --- Map markers ---
+    mapped = [r for r in recent if r.get("lat") is not None and r.get("lon") is not None]
+    map_points = [
+        {
+            "lat": r["lat"],
+            "lon": r["lon"],
+            "color": _CATEGORY_STYLES[_categorize(r.get("incident_type") or "")][1],
+            "type": r.get("incident_type") or "Incident",
+            "loc": r.get("location") or "",
+            "time": _fmt_time(r["created_at"]),
+            "summary": r.get("summary", ""),
+        }
+        for r in mapped
+    ]
+    map_points_json = json.dumps(map_points)
+    map_coverage = (
+        f"Showing location for {len(mapped):,} of {len(recent):,} incidents this week "
+        f"&mdash; not every dispatch includes a mappable location, so this map is a partial "
+        f"picture, not a complete one."
+    )
+
     updated = now.strftime("%H:%M:%S %Z, %b %d %Y")
 
     # pylint: disable=line-too-long
@@ -445,9 +466,21 @@ tbody tr:not(.cat-hdr):hover td{{background:rgba(255,255,255,.025)}}
 .chk{{color:#4ade80;font-size:.9rem}}
 .dot{{color:var(--dim)}}
 .empty{{text-align:center;color:var(--muted);padding:2.5rem}}
+/* Map */
+.map-card{{background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:1.1rem 1.25rem;margin-bottom:1.25rem}}
+.map-hdr{{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap;margin-bottom:.75rem}}
+.map-disclaimer{{font-size:.72rem;color:var(--muted);max-width:520px;line-height:1.4}}
+#incident-map{{height:420px;border-radius:8px;background:var(--surf2)}}
+.leaflet-popup-content-wrapper{{background:var(--surf2);color:var(--text);border-radius:8px}}
+.leaflet-popup-tip{{background:var(--surf2)}}
+.leaflet-popup-content{{font-size:.8rem;line-height:1.4;margin:.6rem .8rem}}
+.popup-type{{font-weight:700;margin-bottom:.2rem}}
+.popup-loc{{color:var(--muted);margin-bottom:.35rem}}
 @media(max-width:900px){{.top-row{{grid-template-columns:1fr}}}}
-@media(max-width:600px){{.stats{{grid-template-columns:1fr 1fr}}.loc{{max-width:100px}}}}
+@media(max-width:600px){{.stats{{grid-template-columns:1fr 1fr}}.loc{{max-width:100px}}#incident-map{{height:300px}}}}
 </style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
 </head>
 <body>
 <header>
@@ -481,6 +514,14 @@ tbody tr:not(.cat-hdr):hover td{{background:rgba(255,255,255,.025)}}
 <div class="section-lbl">This week by type</div>
 <div class="by-type-grid">{cat_cards_html}</div>
 
+<div class="map-card">
+  <div class="map-hdr">
+    <div class="section-lbl" style="margin-bottom:0">Incident map &mdash; last 7 days</div>
+    <div class="map-disclaimer">{map_coverage}</div>
+  </div>
+  <div id="incident-map"></div>
+</div>
+
 <div class="section-lbl" style="margin-bottom:.75rem">Recent incidents &mdash; last 7 days</div>
 <table>
 <thead><tr>
@@ -490,6 +531,37 @@ tbody tr:not(.cat-hdr):hover td{{background:rgba(255,255,255,.025)}}
 {rows_html}
 </tbody>
 </table>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script>
+(function() {{
+  var points = {map_points_json};
+  var mapEl = document.getElementById('incident-map');
+  if (!points.length) {{
+    mapEl.innerHTML = '<div class="empty">No mappable incidents in the last 7 days.</div>';
+    return;
+  }}
+  var map = L.map('incident-map', {{scrollWheelZoom: false}});
+  L.tileLayer('https://{{s}}.basemaps.cartocdn.com/dark_all/{{z}}/{{x}}/{{y}}{{r}}.png', {{
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+    maxZoom: 19,
+  }}).addTo(map);
+  var markers = [];
+  points.forEach(function(p) {{
+    var marker = L.circleMarker([p.lat, p.lon], {{
+      radius: 7, color: p.color, fillColor: p.color, fillOpacity: 0.75, weight: 1.5,
+    }}).bindPopup(
+      '<div class="popup-type" style="color:' + p.color + '">' + p.type + '</div>' +
+      '<div class="popup-loc">' + p.loc + ' &middot; ' + p.time + '</div>' +
+      '<div>' + p.summary + '</div>'
+    );
+    marker.addTo(map);
+    markers.push(marker);
+  }});
+  map.fitBounds(L.featureGroup(markers).getBounds().pad(0.15));
+}})();
+</script>
 </body>
 </html>"""
 

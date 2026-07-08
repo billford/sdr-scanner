@@ -40,7 +40,9 @@ def init_db():
                 raw_transcript TEXT NOT NULL,
                 transcript_hash TEXT NOT NULL UNIQUE,
                 posted INTEGER DEFAULT 0,
-                post_id TEXT
+                post_id TEXT,
+                lat REAL,
+                lon REAL
             );
 
             CREATE TABLE IF NOT EXISTS chunks (
@@ -49,7 +51,22 @@ def init_db():
                 transcript_hash TEXT NOT NULL UNIQUE,
                 had_incident INTEGER DEFAULT 0
             );
+
+            CREATE TABLE IF NOT EXISTS geocode_cache (
+                location TEXT PRIMARY KEY,
+                lat REAL,
+                lon REAL,
+                looked_up_at TEXT NOT NULL
+            );
         """)
+        _add_column_if_missing(conn, "incidents", "lat", "REAL")
+        _add_column_if_missing(conn, "incidents", "lon", "REAL")
+
+
+def _add_column_if_missing(conn, table: str, column: str, coltype: str) -> None:
+    cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
 
 
 def transcript_hash(text: str) -> str:
@@ -82,7 +99,7 @@ def save_incident(incident: dict) -> int:
         cur = conn.execute(
             "INSERT OR IGNORE INTO incidents "
             "(created_at, incident_time, incident_type, location, summary, "
-            "raw_transcript, transcript_hash) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "raw_transcript, transcript_hash, lat, lon) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 _now(),
                 incident.get("time"),
@@ -91,6 +108,8 @@ def save_incident(incident: dict) -> int:
                 incident["summary"],
                 incident["raw_transcript"],
                 incident["transcript_hash"],
+                incident.get("lat"),
+                incident.get("lon"),
             ),
         )
         return cur.lastrowid or None
@@ -112,6 +131,35 @@ def unposted_incidents() -> list:
             "SELECT * FROM incidents WHERE posted = 0 ORDER BY created_at ASC"
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+GEOCODE_MISS = object()
+
+
+def cached_geocode(location: str):
+    """
+    Return a cached (lat, lon) for a location string, None if never looked up,
+    or GEOCODE_MISS if it was looked up before but no coordinates were found.
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT lat, lon FROM geocode_cache WHERE location = ?", (location,)
+        ).fetchone()
+        if row is None:
+            return None
+        if row["lat"] is None:
+            return GEOCODE_MISS
+        return (row["lat"], row["lon"])
+
+
+def save_geocode(location: str, lat: float | None, lon: float | None) -> None:
+    """Cache a geocoding result (lat/lon None records a confirmed miss)."""
+    with get_conn() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO geocode_cache (location, lat, lon, looked_up_at) "
+            "VALUES (?, ?, ?, ?)",
+            (location, lat, lon, _now()),
+        )
 
 
 def recent_incidents(minutes: int = 30) -> list:

@@ -16,6 +16,7 @@ import capture
 import transcribe
 import classify
 import summarize
+import geocode
 import post
 import dashboard
 from config import POST_COOLDOWN_MINUTES, POST_MAX_AGE_HOURS, BROADCASTIFY_FEED_URLS
@@ -126,6 +127,10 @@ def main():
 
         # Stage 3: Claude polish (API — only hits here on real incidents)
         incident = summarize.polish(incident)
+
+        coords = geocode.geocode(incident.get("location"))
+        if coords:
+            incident["lat"], incident["lon"] = coords
 
         incident_id = db.save_incident(incident)
         if incident_id is None:

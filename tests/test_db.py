@@ -66,3 +66,33 @@ def test_recent_incidents_unposted_included(tmp_db, sample_incident):
     db.save_incident(sample_incident)
     recent = db.recent_incidents(30)
     assert recent[0]["posted"] == 0
+
+
+def test_save_incident_stores_coordinates(tmp_db, sample_incident):
+    sample_incident["lat"] = 41.499
+    sample_incident["lon"] = -81.694
+    db.save_incident(sample_incident)
+    recent = db.recent_incidents(30)
+    assert recent[0]["lat"] == 41.499
+    assert recent[0]["lon"] == -81.694
+
+
+def test_save_incident_without_coordinates(tmp_db, sample_incident):
+    db.save_incident(sample_incident)
+    recent = db.recent_incidents(30)
+    assert recent[0]["lat"] is None
+    assert recent[0]["lon"] is None
+
+
+def test_cached_geocode_missing(tmp_db):
+    assert db.cached_geocode("nowhere in particular") is None
+
+
+def test_cached_geocode_hit(tmp_db):
+    db.save_geocode("123 Main St", 41.499, -81.694)
+    assert db.cached_geocode("123 Main St") == (41.499, -81.694)
+
+
+def test_cached_geocode_negative_result(tmp_db):
+    db.save_geocode("unknown", None, None)
+    assert db.cached_geocode("unknown") is db.GEOCODE_MISS
