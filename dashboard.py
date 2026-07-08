@@ -119,38 +119,45 @@ def _notify(title: str, subtitle: str, body: str) -> None:
     )
 
 
-def _watch_pages_build(commit_sha: str) -> None:
-    """Poll GitHub Pages build status for commit_sha; notify if it errors."""
+def _trigger_pages_deploy(slug: str) -> None:
+    """Fire the Actions-based Pages deploy workflow right after a push (best-effort)."""
+    subprocess.run(  # nosec — hardcoded gh cmd, no user input
+        ["gh", "api", "-X", "POST", f"repos/{slug}/actions/workflows/pages.yml/dispatches",
+         "-f", "ref=main"],
+        capture_output=True, timeout=15, check=False,
+    )
+
+
+def _watch_pages_deploy(commit_sha: str) -> None:
+    """Poll the dispatched Actions deploy run; notify if it fails or never starts."""
     try:
         slug = _gh_repo_slug()
     except Exception:  # pylint: disable=broad-exception-caught
         return
+    _trigger_pages_deploy(slug)
     deadline = time.monotonic() + _PAGES_POLL_TIMEOUT
     time.sleep(_PAGES_POLL_INTERVAL)
     while time.monotonic() < deadline:
         try:
             out = subprocess.check_output(  # nosec
-                ["gh", "api", f"repos/{slug}/pages/builds",
-                 "--jq", ".[0] | {status, commit: .commit[:8], error: .error.message}"],
+                ["gh", "api", f"repos/{slug}/actions/workflows/pages.yml/runs",
+                 "-f", "event=workflow_dispatch", "-f", "per_page=1",
+                 "--jq", ".workflow_runs[0] | {status, conclusion, html_url}"],
                 timeout=15,
             )
-            build = json.loads(out)
+            run = json.loads(out)
         except Exception:  # pylint: disable=broad-exception-caught
             break
-        if build.get("commit") != commit_sha[:8]:
-            time.sleep(_PAGES_POLL_INTERVAL)
-            continue
-        status = build.get("status")
-        if status == "built":
-            log.info("Pages build succeeded for %s", commit_sha[:8])
-            return
-        if status == "errored":
-            msg = build.get("error") or "unknown error"
-            log.warning("Pages build failed for %s: %s", commit_sha[:8], msg)
-            _notify("Scanner", "Pages build failed", msg)
+        status = run.get("status")
+        if status == "completed":
+            if run.get("conclusion") == "success":
+                log.info("Pages deploy succeeded for %s", commit_sha[:8])
+            else:
+                log.warning("Pages deploy failed for %s: %s", commit_sha[:8], run.get("html_url"))
+                _notify("Scanner", "Pages deploy failed", run.get("html_url", "unknown run"))
             return
         time.sleep(_PAGES_POLL_INTERVAL)
-    log.debug("Pages build watch timed out for %s", commit_sha[:8])
+    log.debug("Pages deploy watch timed out for %s", commit_sha[:8])
 
 
 _CATEGORY_ORDER = ["Criminal", "Medical", "Fire", "Traffic", "Misc"]
@@ -248,7 +255,7 @@ def _push_to_gh_pages() -> None:
                 return
             _LAST_PUSH = time.time()
             log.info("Dashboard pushed to gh-pages")
-            threading.Thread(target=_watch_pages_build, args=(commit,), daemon=True).start()
+            threading.Thread(target=_watch_pages_deploy, args=(commit,), daemon=True).start()
         except Exception:  # pylint: disable=broad-exception-caught  # nosec B110 — best-effort push
             log.warning("gh-pages push skipped", exc_info=True)
 
@@ -392,7 +399,9 @@ def generate() -> None:
     map_coverage = (
         f"Showing location for {len(mapped):,} of {len(recent):,} incidents this week "
         f"&mdash; not every dispatch includes a mappable location, so this map is a partial "
-        f"picture, not a complete one."
+        f"picture, not a complete one. Locations are approximate, geocoded from dispatch "
+        f"audio via <a href=\"https://nominatim.org\" target=\"_blank\" rel=\"noopener\">"
+        f"OpenStreetMap Nominatim</a>."
     )
 
     updated = now.strftime("%H:%M:%S %Z, %b %d %Y")
@@ -470,6 +479,7 @@ tbody tr:not(.cat-hdr):hover td{{background:rgba(255,255,255,.025)}}
 .map-card{{background:var(--surf);border:1px solid var(--bdr);border-radius:12px;padding:1.1rem 1.25rem;margin-bottom:1.25rem}}
 .map-hdr{{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap;margin-bottom:.75rem}}
 .map-disclaimer{{font-size:.72rem;color:var(--muted);max-width:520px;line-height:1.4}}
+.map-disclaimer a{{color:inherit;text-decoration:underline}}
 #incident-map{{height:420px;border-radius:8px;background:var(--surf2)}}
 .leaflet-popup-content-wrapper{{background:var(--surf2);color:var(--text);border-radius:8px}}
 .leaflet-popup-tip{{background:var(--surf2)}}
