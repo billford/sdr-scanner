@@ -1,6 +1,6 @@
 # Scanner Page
 
-Automated pipeline: Broadcastify audio → Whisper STT → Ollama (local) → Claude polish → Zapier webhook.
+Automated pipeline: Broadcastify audio → Whisper STT → Ollama (local) → Claude polish → Facebook Page post.
 
 Works with any Broadcastify feed. Configured by default for Chagrin Valley Dispatch.
 
@@ -25,13 +25,12 @@ flowchart TD
     K -->|no| L[Saved, not posted\nretried next chunk]
     L -->|cooldown clears| M
     K -->|yes| M[post.py]
-    M --> N([Zapier Webhook])
+    M --> N([Facebook Page])
     M --> O([incidents.txt])
     M --> P([post_queue.json])
-    N -->|Zap routes to| Q([SMS / Email / Slack\netc.])
 
     style A fill:#4a90d9,color:#fff
-    style Q fill:#27ae60,color:#fff
+    style N fill:#27ae60,color:#fff
     style I fill:#8e44ad,color:#fff
     style H fill:#e67e22,color:#fff
 ```
@@ -67,9 +66,10 @@ All settings live in `.env`. Copy `.env.example` to get started:
 | `ANTHROPIC_API_KEY` | — | Required for Claude polish step |
 | `OLLAMA_MODEL` | `llama3.2:3b` | Local model for incident classification |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama server address |
-| `POST_BACKEND` | `queue` | `queue`, `text`, `zapier`, or `print` |
+| `POST_BACKEND` | `queue` | `queue`, `text`, `facebook`, or `print` |
 | `TEXT_OUTPUT_FILE` | `incidents.txt` | Output path for `text` backend |
-| `ZAPIER_WEBHOOK_URL` | — | Catch Hook URL for `zapier` backend |
+| `FB_PAGE_ID` | — | Facebook Page ID for `facebook` backend |
+| `FB_PAGE_ACCESS_TOKEN` | — | Page access token for `facebook` backend |
 
 ### Finding your Broadcastify stream URL
 
@@ -101,31 +101,16 @@ stream → whisper (free, local)
 |---|---|
 | `queue` (default) | Appends to `post_queue.json` for manual review |
 | `text` | Appends formatted entries to `incidents.txt` (or `TEXT_OUTPUT_FILE`) |
-| `zapier` | POSTs incident JSON to a Zapier Catch Hook URL |
+| `facebook` | Posts directly to a Facebook Page via the Graph API |
 | `print` | Prints formatted post to stdout |
 
-### Zapier setup
+### Facebook setup
 
-1. In Zapier, create a new Zap → trigger: **Webhooks by Zapier → Catch Hook**
-2. Copy the webhook URL
-3. Set `ZAPIER_WEBHOOK_URL=<url>` in `.env`
-4. Set `POST_BACKEND=zapier`
+1. Create a Facebook Page and a long-lived Page access token with `pages_manage_posts` permission
+2. Set `FB_PAGE_ID=<page id>` and `FB_PAGE_ACCESS_TOKEN=<token>` in `.env`
+3. Set `POST_BACKEND=facebook`
 
-From there you can route to SMS, email, Slack, or anything else Zapier supports — no code changes needed.
-
-The payload sent to Zapier for incidents:
-
-```json
-{
-  "summary": "Structure Fire — 123 Main St — Engine 3 dispatched.",
-  "type": "Structure Fire",
-  "location": "123 Main St",
-  "time": "14:32",
-  "posted_at": "2026-05-12T14:32:00+00:00"
-}
-```
-
-Stream alarms also POST to the same webhook with `"type": "stream_alarm"` so you can filter or route them separately in Zapier (e.g. send alarms to email, incidents to Facebook).
+Stream alarms are macOS notifications only — they are not posted to Facebook.
 
 ## Running as a background service (macOS)
 
@@ -178,7 +163,7 @@ Logs go to `scanner.log` in the project directory. The service auto-restarts wit
 | `transcribe.py` | Whisper transcription |
 | `classify.py` | Keyword pre-filter + Ollama local classification |
 | `summarize.py` | Claude API polish step |
-| `post.py` | Zapier / text / queue posting |
+| `post.py` | Facebook / text / queue posting |
 | `db.py` | SQLite incident log + dedup |
 | `config.py` | All configuration |
 
@@ -187,7 +172,7 @@ Logs go to `scanner.log` in the project directory. The service auto-restarts wit
 When a Broadcastify feed goes offline (feeder down, etc.) the pipeline:
 
 1. Retries quickly — 5s, 10s, 20s — to recover from brief dropouts
-2. After 3 consecutive failures, fires a **stream-down alarm**: macOS notification (Sosumi sound) + Zapier webhook with `type: stream_alarm`
+2. After 3 consecutive failures, fires a **stream-down alarm**: macOS notification (Sosumi sound)
 3. Switches to a **10-minute retry interval** to keep logs quiet until the feed recovers
 4. Logs `"Stream reconnected — clearing alarm"` and resets when the feed comes back
 

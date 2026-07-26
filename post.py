@@ -2,7 +2,6 @@
 Posting layer — backends selectable via POST_BACKEND env var:
   queue    — write to local JSON queue file (default, safe for testing)
   text     — append plain-text log to TEXT_OUTPUT_FILE (default: incidents.txt)
-  zapier   — POST incident JSON to a Zapier Catch Hook webhook URL
   facebook — post directly to a Facebook Page via the Graph API
   print    — stdout only (debug)
 """
@@ -14,7 +13,6 @@ from pathlib import Path
 
 import requests
 
-from config import ZAPIER_WEBHOOK_URL
 from config import FB_PAGE_ID, FB_PAGE_ACCESS_TOKEN  # module-level so tests can patch
 from config import QUEUE_FILE, TEXT_OUTPUT_FILE  # module-level so tests can patch
 
@@ -27,8 +25,6 @@ def post_incident(incident: dict) -> str:
     """Post incident; returns post_id string (or empty on queue/text/print)."""
     backend = POST_BACKEND.lower()
 
-    if backend == "zapier":
-        return _post_zapier(incident)
     if backend == "facebook":
         return _post_facebook(incident)
     if backend == "text":
@@ -39,28 +35,6 @@ def post_incident(incident: dict) -> str:
         print("=" * 60 + "\n")
         return ""
     return _post_queue(incident)
-
-
-def _post_zapier(incident: dict) -> str:
-    if not ZAPIER_WEBHOOK_URL:
-        log.error("ZAPIER_WEBHOOK_URL must be set for zapier backend")
-        return ""
-
-    payload = {
-        "summary": incident["summary"],
-        "type": incident.get("type"),
-        "location": incident.get("location"),
-        "time": incident.get("time"),
-        "posted_at": datetime.now(timezone.utc).isoformat(),
-    }
-    try:
-        resp = requests.post(ZAPIER_WEBHOOK_URL, json=payload, timeout=15)
-        resp.raise_for_status()
-        log.info("Sent to Zapier webhook: %s", incident["summary"][:80])
-        return ""
-    except requests.RequestException as exc:
-        log.error("Zapier webhook failed: %s", exc)
-        raise
 
 
 def _post_facebook(incident: dict) -> str:

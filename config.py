@@ -49,13 +49,12 @@ ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 DB_PATH = "incidents.db"
 QUEUE_FILE = "post_queue.json"
 TEXT_OUTPUT_FILE = os.getenv("TEXT_OUTPUT_FILE", "incidents.txt")
-ZAPIER_WEBHOOK_URL = os.getenv("ZAPIER_WEBHOOK_URL", "")
 FB_PAGE_ID = os.getenv("FB_PAGE_ID", "")
 FB_PAGE_ACCESS_TOKEN = os.getenv("FB_PAGE_ACCESS_TOKEN", "")
 
 # Ollama classifier (via olla proxy)
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://192.168.1.182:40114/olla/ollama")
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://lampoon.billford.io:40114/olla/ollama")
 
 # Stream capture
 STREAM_READ_TIMEOUT = 30

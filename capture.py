@@ -23,7 +23,6 @@ from config import (
     SILENCE_THRESHOLD_RMS,
     STREAM_READ_TIMEOUT,
     STREAM_CHUNK_BYTES,
-    ZAPIER_WEBHOOK_URL,
 )
 
 log = logging.getLogger(__name__)
@@ -54,17 +53,6 @@ def _send_stream_alarm(url: str, exc: Exception) -> None:
         subprocess.run(["osascript", "-e", script], check=False, timeout=5)  # nosec — hardcoded cmd, no user input
     except Exception:  # pylint: disable=broad-exception-caught  # nosec B110 — fire-and-forget notification
         log.debug("osascript notification failed")
-
-    # Zapier webhook — same endpoint as incidents, differentiated by type field
-    if ZAPIER_WEBHOOK_URL:
-        try:
-            requests.post(
-                ZAPIER_WEBHOOK_URL,
-                json={"type": "stream_alarm", "summary": f"{title}: feed {feed_id}", "location": None, "time": None},
-                timeout=10,
-            )
-        except Exception:  # pylint: disable=broad-exception-caught  # nosec B110 — fire-and-forget alarm webhook
-            log.debug("Zapier alarm webhook failed")
 
     dashboard.update_stream_status(url, "offline")
     log.error("Stream alarm sent for %s", url)

@@ -127,55 +127,6 @@ def test_post_text_returns_empty_string(incident, tmp_text, monkeypatch):
     assert result == ""
 
 
-# ── zapier backend ────────────────────────────────────────────────────────────
-
-def test_post_zapier_success(incident, monkeypatch):
-    monkeypatch.setattr(post, "POST_BACKEND", "zapier")
-    monkeypatch.setattr(post, "ZAPIER_WEBHOOK_URL", "https://hooks.zapier.com/fake/123")
-
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status.return_value = None
-
-    with patch("post.requests.post", return_value=mock_resp) as mock_post:
-        result = post.post_incident(incident)
-
-    assert result == ""
-    mock_post.assert_called_once()
-    payload = mock_post.call_args.kwargs["json"]
-    assert payload["summary"] == incident["summary"]
-    assert payload["type"] == incident["type"]
-    assert payload["location"] == incident["location"]
-    assert "posted_at" in payload
-
-
-def test_post_zapier_missing_url(incident, monkeypatch):
-    monkeypatch.setattr(post, "POST_BACKEND", "zapier")
-    monkeypatch.setattr(post, "ZAPIER_WEBHOOK_URL", "")
-    result = post.post_incident(incident)
-    assert result == ""
-
-
-def test_post_zapier_network_error_raises(incident, monkeypatch):
-    monkeypatch.setattr(post, "POST_BACKEND", "zapier")
-    monkeypatch.setattr(post, "ZAPIER_WEBHOOK_URL", "https://hooks.zapier.com/fake/123")
-
-    with patch("post.requests.post", side_effect=ConnectionError("Network error")):
-        with pytest.raises(ConnectionError):
-            post.post_incident(incident)
-
-
-def test_post_zapier_http_error_raises(incident, monkeypatch):
-    monkeypatch.setattr(post, "POST_BACKEND", "zapier")
-    monkeypatch.setattr(post, "ZAPIER_WEBHOOK_URL", "https://hooks.zapier.com/fake/123")
-
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status.side_effect = Exception("HTTP 400")
-
-    with patch("post.requests.post", return_value=mock_resp):
-        with pytest.raises(Exception, match="HTTP 400"):
-            post.post_incident(incident)
-
-
 # ── facebook backend ──────────────────────────────────────────────────────────
 
 def test_post_facebook_success(incident, monkeypatch):
