@@ -35,6 +35,17 @@ def _parse_feed_urls() -> list[str]:
     return [
         "https://audio.broadcastify.com/23058.mp3",  # Cleveland Fire and EMS
         "https://audio.broadcastify.com/11446.mp3",  # Cleveland Police
+        "https://audio.broadcastify.com/25008.mp3",  # Cleveland Police - West
+        "https://audio.broadcastify.com/42707.mp3",  # East Cleveland Police and Fire
+        "https://audio.broadcastify.com/38526.mp3",  # Parma / Parma Heights Police and Fire
+        "https://audio.broadcastify.com/35157.mp3",  # Lakewood Police and Fire
+        "https://audio.broadcastify.com/31282.mp3",  # South Euclid/Cleveland Hts/Richmond Hts/University Hts PD
+        "https://audio.broadcastify.com/29943.mp3",  # Shaker Hts/University Hts/Cleveland Hts Fire
+        "https://audio.broadcastify.com/24080.mp3",  # Shaker Heights Police
+        "https://audio.broadcastify.com/21419.mp3",  # Garfield Heights and Maple Heights PD
+        "https://audio.broadcastify.com/15234.mp3",  # WestCom Fire and West Suburbs Police
+        "https://audio.broadcastify.com/38131.mp3",  # Southwest Emergency Dispatch (SWEDC)
+        "https://audio.broadcastify.com/38127.mp3",  # Brook Park Police
     ]
 
 BROADCASTIFY_FEED_URLS: list[str] = _parse_feed_urls()
