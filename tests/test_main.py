@@ -1,4 +1,5 @@
 import pytest
+import requests
 from unittest.mock import patch, MagicMock, call
 import main
 
@@ -172,3 +173,33 @@ def test_main_stops_when_running_false(base_mocks, monkeypatch):
     monkeypatch.setattr(main, "_RUNNING", False)
     _run_main_with_chunks([b"audio"], base_mocks)
     base_mocks["transcribe"].assert_not_called()
+
+
+# ── post backend failure resilience ────────────────────────────────────────────
+
+def test_main_post_failure_does_not_crash_loop(base_mocks):
+    """A Facebook/API timeout on post_incident must not kill the whole process."""
+    base_mocks["post_incident"] = MagicMock(side_effect=requests.ConnectionError("boom"))
+    _run_main_with_chunks([b"audio1", b"audio2"], base_mocks)
+    # loop kept going and processed both chunks despite the post failure
+    assert base_mocks["transcribe"].call_count == 2
+    base_mocks["mark_posted"].assert_not_called()
+
+
+def test_flush_unposted_post_failure_leaves_incident_unposted():
+    """A failed post during queue-flush must not mark the incident posted."""
+    from datetime import datetime, timezone
+    row = {
+        "id": 7,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "incident_type": "Structure Fire",
+        "summary": "Fire at 123 Main St",
+        "location": "123 Main St",
+        "incident_time": "09:00",
+    }
+    with patch("main.db.unposted_incidents", return_value=[row]), \
+         patch("main.db.recent_incidents", return_value=[]), \
+         patch("main.db.mark_posted") as mark_posted, \
+         patch("main.post.post_incident", side_effect=requests.Timeout("slow")):
+        main._flush_unposted()  # must not raise
+        mark_posted.assert_not_called()

@@ -11,6 +11,8 @@ import signal
 import time
 from datetime import datetime, timezone, timedelta
 
+import requests
+
 import db
 import capture
 import transcribe
@@ -66,7 +68,11 @@ def _flush_unposted() -> None:
                 "location": row["location"],
                 "time": row["incident_time"],
             }
-            post_id = post.post_incident(incident)
+            try:
+                post_id = post.post_incident(incident)
+            except requests.RequestException:
+                log.warning("Post backend failed flushing incident #%d — will retry later", row["id"])
+                return
             db.mark_posted(row["id"], post_id)
             return  # one post per flush cycle — drains at ~1/min
 
@@ -138,8 +144,11 @@ def main():
             continue
 
         if _cooldown_ok(incident.get("type")):
-            post_id = post.post_incident(incident)
-            db.mark_posted(incident_id, post_id)
+            try:
+                post_id = post.post_incident(incident)
+                db.mark_posted(incident_id, post_id)
+            except requests.RequestException:
+                log.warning("Post backend failed for incident #%s — left unposted, will retry", incident_id)
         else:
             log.info("Cooldown active — saved but not posted.")
 
