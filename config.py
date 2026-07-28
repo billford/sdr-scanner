@@ -33,12 +33,18 @@ def _parse_feed_urls() -> list[str]:
     if raw:
         return [u.strip() for u in raw.split(",") if u.strip()]
     return [
-        "https://broadcastify.cdnstream1.com/23058",  # Cleveland Fire and EMS
-        "https://broadcastify.cdnstream1.com/11446",  # Cleveland Police
+        "https://audio.broadcastify.com/23058.mp3",  # Cleveland Fire and EMS
+        "https://audio.broadcastify.com/11446.mp3",  # Cleveland Police
     ]
 
 BROADCASTIFY_FEED_URLS: list[str] = _parse_feed_urls()
 BROADCASTIFY_FEED_URL = BROADCASTIFY_FEED_URLS[0]  # legacy single-feed compat
+
+# Premium account credentials — required for audio.broadcastify.com feeds.
+# The old unauthenticated broadcastify.cdnstream1.com mounts stopped serving
+# audio; Premium feeds now require HTTP Basic Auth with your account login.
+BROADCASTIFY_USERNAME = os.getenv("BROADCASTIFY_USERNAME", "")
+BROADCASTIFY_PASSWORD = os.getenv("BROADCASTIFY_PASSWORD", "")
 CHUNK_DURATION_SECONDS = 60
 SILENCE_THRESHOLD_RMS = 500
 WHISPER_MODEL = "base.en"

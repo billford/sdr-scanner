@@ -19,6 +19,8 @@ import dashboard
 
 from config import (
     BROADCASTIFY_FEED_URL,
+    BROADCASTIFY_USERNAME,
+    BROADCASTIFY_PASSWORD,
     CHUNK_DURATION_SECONDS,
     SILENCE_THRESHOLD_RMS,
     STREAM_READ_TIMEOUT,
@@ -63,7 +65,10 @@ def _open_stream(url: str):
         "User-Agent": "Mozilla/5.0 (compatible; scanner-monitor/1.0)",
         "Icy-MetaData": "0",
     }
-    resp = requests.get(url, stream=True, headers=headers, timeout=STREAM_READ_TIMEOUT)
+    auth = (BROADCASTIFY_USERNAME, BROADCASTIFY_PASSWORD) if BROADCASTIFY_USERNAME else None
+    resp = requests.get(
+        url, stream=True, headers=headers, auth=auth, timeout=STREAM_READ_TIMEOUT
+    )
     resp.raise_for_status()
     return resp
 

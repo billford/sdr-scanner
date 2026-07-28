@@ -61,6 +61,8 @@ All settings live in `.env`. Copy `.env.example` to get started:
 | Variable | Default | Description |
 |---|---|---|
 | `BROADCASTIFY_FEED_URL` | Chagrin Valley feed | Full stream URL from Broadcastify |
+| `BROADCASTIFY_USERNAME` | — | Broadcastify Premium account login (required for `audio.broadcastify.com` feeds) |
+| `BROADCASTIFY_PASSWORD` | — | Broadcastify Premium account password |
 | `COMMUNITY_NAME` | `Chagrin Valley` | Short name, used in logs |
 | `COMMUNITY_DESC` | `Chagrin Falls and surrounding Cuyahoga County communities` | Used in Claude prompt |
 | `ANTHROPIC_API_KEY` | — | Required for Claude polish step |
@@ -75,12 +77,18 @@ All settings live in `.env`. Copy `.env.example` to get started:
 
 1. Go to broadcastify.com and find your feed
 2. The feed ID is in the URL: `broadcastify.com/listen/feed/XXXXX`
-3. Stream URL format: `https://broadcastify.cdnstream1.com/XXXXX`
+3. Stream URL format (Premium subscriber): `https://audio.broadcastify.com/XXXXX.mp3`,
+   with `BROADCASTIFY_USERNAME`/`BROADCASTIFY_PASSWORD` set to your account login.
+   The older unauthenticated `broadcastify.cdnstream1.com/XXXXX` mounts no
+   longer serve audio — Premium feeds require Basic Auth against
+   `audio.broadcastify.com`.
 
 ### Example: configuring for a different community
 
 ```
-BROADCASTIFY_FEED_URL=https://broadcastify.cdnstream1.com/99999
+BROADCASTIFY_FEED_URL=https://audio.broadcastify.com/99999.mp3
+BROADCASTIFY_USERNAME=you@example.com
+BROADCASTIFY_PASSWORD=your-broadcastify-password
 COMMUNITY_NAME=Akron Metro
 COMMUNITY_DESC=Akron and surrounding Summit County communities
 ```
