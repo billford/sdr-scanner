@@ -40,3 +40,7 @@ jobs:
 
       - id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          # Default is 10 min, which a slow Pages rollout can exceed and report
+          # as a failed build even though the deploy goes on to succeed.
+          timeout: 1200000
