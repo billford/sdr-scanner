@@ -2,7 +2,8 @@
 Posting layer — backends selectable via POST_BACKEND env var:
   queue    — write to local JSON queue file (default, safe for testing)
   text     — append plain-text log to TEXT_OUTPUT_FILE (default: incidents.txt)
-  facebook — post directly to a Facebook Page via the Graph API
+  facebook — post directly to a Facebook Page via the Graph API (summaries are
+             run through sanitize.soften first to mask moderation-bait words)
   print    — stdout only (debug)
 """
 import json
@@ -15,6 +16,7 @@ import requests
 
 from config import FB_PAGE_ID, FB_PAGE_ACCESS_TOKEN  # module-level so tests can patch
 from config import QUEUE_FILE, TEXT_OUTPUT_FILE  # module-level so tests can patch
+from sanitize import soften
 
 log = logging.getLogger(__name__)
 
@@ -43,15 +45,16 @@ def _post_facebook(incident: dict) -> str:
         return ""
 
     url = f"https://graph.facebook.com/v21.0/{FB_PAGE_ID}/feed"
+    message = soften(incident["summary"])
     try:
         resp = requests.post(
             url,
-            data={"message": incident["summary"], "access_token": FB_PAGE_ACCESS_TOKEN},
+            data={"message": message, "access_token": FB_PAGE_ACCESS_TOKEN},
             timeout=15,
         )
         resp.raise_for_status()
         post_id = resp.json().get("id", "")
-        log.info("Posted to Facebook (%s): %s", post_id, incident["summary"][:80])
+        log.info("Posted to Facebook (%s): %s", post_id, message[:80])
         return post_id
     except requests.RequestException as exc:
         log.error("Facebook post failed: %s", exc)
