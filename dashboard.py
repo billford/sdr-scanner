@@ -2,8 +2,10 @@
 import json
 import logging
 import math
+import shutil
+import tempfile
 from collections import defaultdict
-import subprocess  # nosec B404 — only used for git plumbing; no user input
+import subprocess  # nosec B404 — only used to invoke wrangler; no user input
 import threading
 import time
 from datetime import datetime, timezone
@@ -21,10 +23,13 @@ DASHBOARD_FILE = Path("dashboard.html")
 _status_lock = threading.Lock()
 _push_lock = threading.Lock()
 _LAST_PUSH: float = 0.0
-_PUSH_INTERVAL = 420  # push to gh-pages at most once every 7 minutes — GitHub Pages'
-                       # legacy build pipeline throttles/fails builds past ~10/hour
-_PAGES_POLL_INTERVAL = 15   # seconds between build status checks
-_PAGES_POLL_TIMEOUT = 120   # give up waiting after this many seconds
+# Cloudflare deploys take a couple of seconds and aren't throttled the way GitHub
+# Pages' build pipeline was (it failed past ~10 builds/hour, which is why this
+# used to be 420s). Kept at 120s only so a burst of incidents doesn't spawn a
+# deploy per incident.
+_PUSH_INTERVAL = 120
+_CF_PROJECT = "sdr-scanner"
+_DEPLOY_TIMEOUT = 120  # seconds to allow wrangler before giving up
 
 log = logging.getLogger(__name__)
 
@@ -104,63 +109,12 @@ def _pie_svg(category_totals: list[tuple[str, int]], size: int = 220) -> str:
     return f'<svg width="{size}" height="{size}" viewBox="0 0 {size} {size}">{"".join(paths)}</svg>'
 
 
-def _gh_repo_slug() -> str:
-    """Return 'owner/repo' from the origin remote URL."""
-    url = subprocess.check_output(  # nosec
-        ["git", "remote", "get-url", "origin"], timeout=5
-    ).decode().strip()
-    # handles https://github.com/owner/repo.git and git@github.com:owner/repo.git
-    url = url.removesuffix(".git")
-    return url.split("github.com/")[-1].split("github.com:")[-1]
-
-
 def _notify(title: str, subtitle: str, body: str) -> None:
     subprocess.run(  # nosec — hardcoded osascript, no user input
         ["osascript", "-e",
          f'display notification "{body[:200]}" with title "{title}" subtitle "{subtitle}"'],
         capture_output=True, check=False,
     )
-
-
-def _trigger_pages_deploy(slug: str) -> None:
-    """Fire the Actions-based Pages deploy workflow right after a push (best-effort)."""
-    subprocess.run(  # nosec — hardcoded gh cmd, no user input
-        ["gh", "api", "-X", "POST", f"repos/{slug}/actions/workflows/pages.yml/dispatches",
-         "-f", "ref=main"],
-        capture_output=True, timeout=15, check=False,
-    )
-
-
-def _watch_pages_deploy(commit_sha: str) -> None:
-    """Poll the dispatched Actions deploy run; notify if it fails or never starts."""
-    try:
-        slug = _gh_repo_slug()
-    except Exception:  # pylint: disable=broad-exception-caught
-        return
-    _trigger_pages_deploy(slug)
-    deadline = time.monotonic() + _PAGES_POLL_TIMEOUT
-    time.sleep(_PAGES_POLL_INTERVAL)
-    while time.monotonic() < deadline:
-        try:
-            out = subprocess.check_output(  # nosec
-                ["gh", "api", f"repos/{slug}/actions/workflows/pages.yml/runs",
-                 "-f", "event=workflow_dispatch", "-f", "per_page=1",
-                 "--jq", ".workflow_runs[0] | {status, conclusion, html_url}"],
-                timeout=15,
-            )
-            run = json.loads(out)
-        except Exception:  # pylint: disable=broad-exception-caught
-            break
-        status = run.get("status")
-        if status == "completed":
-            if run.get("conclusion") == "success":
-                log.info("Pages deploy succeeded for %s", commit_sha[:8])
-            else:
-                log.warning("Pages deploy failed for %s: %s", commit_sha[:8], run.get("html_url"))
-                _notify("Scanner", "Pages deploy failed", run.get("html_url", "unknown run"))
-            return
-        time.sleep(_PAGES_POLL_INTERVAL)
-    log.debug("Pages deploy watch timed out for %s", commit_sha[:8])
 
 
 _CATEGORY_ORDER = ["Criminal", "Medical", "Fire", "Traffic", "Misc"]
@@ -214,53 +168,47 @@ _CATEGORY_STYLES: dict[str, tuple[str, str]] = {
 }
 
 
-def _push_to_gh_pages() -> None:
-    """Push dashboard.html to the gh-pages branch via git plumbing. Rate-limited."""
+def _publish_dashboard() -> None:
+    """Deploy dashboard.html to Cloudflare Pages. Rate-limited.
+
+    Publishing used to go through git: write dashboard.html into a gh-pages tree
+    with plumbing, push it, then dispatch an Actions workflow to deploy it. That
+    coupled every refresh to CI capacity, and on 2026-08-06 it stopped working
+    entirely when GitHub couldn't allocate runners — jobs queued for an hour and
+    died without executing a step. Cloudflare takes about three seconds and needs
+    no runner, no queue and no OIDC token.
+    """
     global _LAST_PUSH  # pylint: disable=global-statement
     with _push_lock:
         if time.time() - _LAST_PUSH < _PUSH_INTERVAL:
             return
+        if not DASHBOARD_FILE.exists() or DASHBOARD_FILE.stat().st_size == 0:
+            # Deploying an empty dashboard would replace a good site with a blank
+            # one, and Pages has no notion of "this looks wrong, keep the last".
+            log.warning("Dashboard missing or empty — refusing to deploy.")
+            return
         try:
-            html = DASHBOARD_FILE.read_bytes()
-            blob = subprocess.check_output(  # nosec — hardcoded git cmd, no user input
-                ["git", "hash-object", "-w", "--stdin"], input=html, timeout=10
-            ).decode().strip()
-            nojekyll_blob = subprocess.check_output(  # nosec — hardcoded git cmd
-                ["git", "hash-object", "-w", "--stdin"], input=b"", timeout=10
-            ).decode().strip()
-            tree = subprocess.check_output(  # nosec — hardcoded git cmd
-                ["git", "mktree"],
-                input=(
-                    f"100644 blob {blob}\tindex.html\n"
-                    f"100644 blob {nojekyll_blob}\t.nojekyll\n"
-                ).encode(),
-                timeout=10,
-            ).decode().strip()
-            subprocess.run(  # nosec — hardcoded git cmd
-                ["git", "fetch", "origin", "gh-pages:refs/remotes/origin/gh-pages"],
-                capture_output=True, timeout=30, check=False,
-            )
-            parent = subprocess.check_output(  # nosec — hardcoded git cmd
-                ["git", "rev-parse", "refs/remotes/origin/gh-pages"], timeout=10
-            ).decode().strip()
-            msg = f"Update dashboard {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
-            commit = subprocess.check_output(  # nosec — hardcoded git cmd
-                ["git", "commit-tree", tree, "-p", parent, "-m", msg], timeout=10
-            ).decode().strip()
-            result = subprocess.run(  # nosec — hardcoded git cmd
-                ["git", "push", "origin", f"{commit}:refs/heads/gh-pages"],
-                capture_output=True, timeout=30, check=False,
-            )
+            # wrangler deploys a directory, so stage the single file as index.html.
+            with tempfile.TemporaryDirectory() as staging:
+                shutil.copyfile(DASHBOARD_FILE, Path(staging) / "index.html")
+                result = subprocess.run(  # nosec — fixed argv, no user input
+                    ["npx", "--yes", "wrangler", "pages", "deploy", staging,
+                     "--project-name", _CF_PROJECT, "--branch", "main",
+                     "--commit-dirty=true"],
+                    capture_output=True, timeout=_DEPLOY_TIMEOUT, check=False,
+                )
             if result.returncode != 0:
                 stderr = result.stderr.decode(errors="replace").strip()
-                log.warning("gh-pages push failed (exit %d): %s", result.returncode, stderr)
-                _notify("Scanner", "gh-pages push failed", stderr)
+                log.warning("Cloudflare deploy failed (exit %d): %s", result.returncode, stderr)
+                _notify("Scanner", "Dashboard deploy failed", stderr)
                 return
             _LAST_PUSH = time.time()
-            log.info("Dashboard pushed to gh-pages")
-            threading.Thread(target=_watch_pages_deploy, args=(commit,), daemon=True).start()
-        except Exception:  # pylint: disable=broad-exception-caught  # nosec B110 — best-effort push
-            log.warning("gh-pages push skipped", exc_info=True)
+            log.info("Dashboard deployed to https://%s.pages.dev", _CF_PROJECT)
+        except subprocess.TimeoutExpired:
+            log.warning("Cloudflare deploy timed out after %ds", _DEPLOY_TIMEOUT)
+            _notify("Scanner", "Dashboard deploy failed", "wrangler timed out")
+        except Exception:  # pylint: disable=broad-exception-caught  # nosec B110 — best-effort
+            log.warning("Dashboard deploy skipped", exc_info=True)
 
 
 def generate() -> None:
@@ -586,4 +534,4 @@ tbody tr:not(.cat-hdr):hover td{{background:rgba(255,255,255,.025)}}
 </html>"""
 
     DASHBOARD_FILE.write_text(html, encoding="utf-8")
-    _push_to_gh_pages()
+    _publish_dashboard()
