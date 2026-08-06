@@ -9,3 +9,6 @@ __pycache__/
 dashboard.html
 scanner.log
 stream_status.json
+
+# wrangler local cache (account id, project name) — not for the repo
+.wrangler/
