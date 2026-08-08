@@ -2,42 +2,27 @@ import pytest
 import requests
 from unittest.mock import patch, MagicMock, call
 import main
+import post
 
 
 # ── _cooldown_ok ──────────────────────────────────────────────────────────────
 
-def test_cooldown_ok_no_recent_incidents():
-    with patch("main.db.recent_incidents", return_value=[]):
+def test_cooldown_ok_when_nothing_posted_recently():
+    with patch("main.db.posted_within", return_value=False):
         assert main._cooldown_ok("Structure Fire") is True
 
 
-def test_cooldown_ok_recent_incident_not_posted():
-    row = {"posted": 0, "incident_type": "Structure Fire"}
-    with patch("main.db.recent_incidents", return_value=[row]):
-        assert main._cooldown_ok("Structure Fire") is True
-
-
-def test_cooldown_ok_recent_incident_posted():
-    row = {"posted": 1, "incident_type": "Structure Fire"}
-    with patch("main.db.recent_incidents", return_value=[row]):
+def test_cooldown_blocked_when_same_type_posted_recently():
+    with patch("main.db.posted_within", return_value=True):
         assert main._cooldown_ok("Structure Fire") is False
 
 
-def test_cooldown_ok_different_type_not_blocked():
-    # Posted incident of a different type should not block this type
-    row = {"posted": 1, "incident_type": "Medical Emergency"}
-    with patch("main.db.recent_incidents", return_value=[row]):
-        assert main._cooldown_ok("Structure Fire") is True
-
-
-def test_cooldown_ok_mixed_incidents():
-    incidents = [
-        {"posted": 0, "incident_type": "Structure Fire"},
-        {"posted": 1, "incident_type": "Structure Fire"},
-        {"posted": 0, "incident_type": "Structure Fire"},
-    ]
-    with patch("main.db.recent_incidents", return_value=incidents):
-        assert main._cooldown_ok("Structure Fire") is False
+def test_cooldown_queries_actual_post_time_not_creation_time():
+    """The window must be keyed on when we posted, not when the incident was
+    saved — otherwise draining a backlog bypasses the cooldown entirely."""
+    with patch("main.db.posted_within", return_value=False) as posted_within:
+        main._cooldown_ok("Structure Fire")
+    posted_within.assert_called_once_with(main.POST_COOLDOWN_MINUTES, "Structure Fire")
 
 
 # ── _handle_signal ────────────────────────────────────────────────────────────
@@ -83,6 +68,7 @@ def base_mocks(monkeypatch):
         "mark_posted": MagicMock(),
         "post_incident": MagicMock(return_value=""),
         "recent_incidents": MagicMock(return_value=[]),
+        "posted_within": MagicMock(return_value=False),
         "geocode": MagicMock(return_value=None),
     }
     return mocks
@@ -104,6 +90,7 @@ def _run_main_with_chunks(chunks, mocks):
          patch("main.db.mark_posted", mocks["mark_posted"]), \
          patch("main.post.post_incident", mocks["post_incident"]), \
          patch("main.db.recent_incidents", mocks["recent_incidents"]), \
+         patch("main.db.posted_within", mocks["posted_within"]), \
          patch("main.db.unposted_incidents", return_value=[]), \
          patch("main.dashboard.generate"), \
          patch("main.signal.signal"):
@@ -150,9 +137,7 @@ def test_main_full_pipeline_posts_incident(base_mocks):
 
 
 def test_main_cooldown_skips_post(base_mocks):
-    base_mocks["recent_incidents"] = MagicMock(
-        return_value=[{"posted": 1, "incident_type": "Structure Fire"}]
-    )
+    base_mocks["posted_within"] = MagicMock(return_value=True)
     _run_main_with_chunks([b"audio"], base_mocks)
     base_mocks["save_incident"].assert_called_once()
     base_mocks["post_incident"].assert_not_called()
@@ -186,10 +171,9 @@ def test_main_post_failure_does_not_crash_loop(base_mocks):
     base_mocks["mark_posted"].assert_not_called()
 
 
-def test_flush_unposted_post_failure_leaves_incident_unposted():
-    """A failed post during queue-flush must not mark the incident posted."""
+def _held_row():
     from datetime import datetime, timezone
-    row = {
+    return {
         "id": 7,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "incident_type": "Structure Fire",
@@ -197,9 +181,31 @@ def test_flush_unposted_post_failure_leaves_incident_unposted():
         "location": "123 Main St",
         "incident_time": "09:00",
     }
+
+
+def _flush_with(exc):
+    row = _held_row()
     with patch("main.db.unposted_incidents", return_value=[row]), \
-         patch("main.db.recent_incidents", return_value=[]), \
+         patch("main.db.posted_within", return_value=False), \
          patch("main.db.mark_posted") as mark_posted, \
-         patch("main.post.post_incident", side_effect=requests.Timeout("slow")):
+         patch("main.post.post_incident", side_effect=exc):
         main._flush_unposted()  # must not raise
-        mark_posted.assert_not_called()
+    return mark_posted
+
+
+def test_flush_retryable_failure_leaves_incident_unposted():
+    """A connection error never reached Facebook, so the incident stays queued."""
+    exc = post.PostFailed("no route", maybe_delivered=False, retryable=True)
+    _flush_with(exc).assert_not_called()
+
+
+def test_flush_timeout_closes_incident_to_avoid_duplicate():
+    """A timeout may already be published — retrying it posted the same
+    incident two and three times, so the row is closed out instead."""
+    exc = post.PostFailed("slow", maybe_delivered=True, retryable=False)
+    _flush_with(exc).assert_called_once_with(7, "uncertain")
+
+
+def test_flush_rejection_closes_incident_as_rejected():
+    exc = post.PostFailed("rejected 400", maybe_delivered=False, retryable=False)
+    _flush_with(exc).assert_called_once_with(7, "rejected")

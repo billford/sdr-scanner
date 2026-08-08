@@ -96,3 +96,47 @@ def test_cached_geocode_hit(tmp_db):
 def test_cached_geocode_negative_result(tmp_db):
     db.save_geocode("unknown", None, None)
     assert db.cached_geocode("unknown") is db.GEOCODE_MISS
+
+
+# ── posted_within (post-time cooldown) ────────────────────────────────────────
+
+def test_posted_within_false_when_nothing_posted(tmp_db, sample_incident):
+    db.save_incident(sample_incident)
+    assert db.posted_within(5, sample_incident["type"]) is False
+
+
+def test_posted_within_true_after_marking_posted(tmp_db, sample_incident):
+    incident_id = db.save_incident(sample_incident)
+    db.mark_posted(incident_id, "fb_123")
+    assert db.posted_within(5, sample_incident["type"]) is True
+
+
+def test_posted_within_ignores_other_types(tmp_db, sample_incident):
+    incident_id = db.save_incident(sample_incident)
+    db.mark_posted(incident_id, "fb_123")
+    assert db.posted_within(5, "Some Other Type") is False
+
+
+def test_posted_within_ignores_old_posts(tmp_db, sample_incident):
+    """An incident posted outside the window must not block a new one."""
+    incident_id = db.save_incident(sample_incident)
+    db.mark_posted(incident_id, "fb_123")
+    with db.get_conn() as conn:
+        conn.execute(
+            "UPDATE incidents SET posted_at = datetime('now', '-30 minutes') WHERE id = ?",
+            (incident_id,),
+        )
+    assert db.posted_within(5, sample_incident["type"]) is False
+
+
+def test_posted_within_uses_post_time_not_creation_time(tmp_db, sample_incident):
+    """The old cooldown filtered on created_at, so a backlog drained with no
+    cooldown at all: rows created long ago matched nothing."""
+    incident_id = db.save_incident(sample_incident)
+    with db.get_conn() as conn:
+        conn.execute(
+            "UPDATE incidents SET created_at = datetime('now', '-6 hours') WHERE id = ?",
+            (incident_id,),
+        )
+    db.mark_posted(incident_id, "fb_123")  # posted right now, created hours ago
+    assert db.posted_within(5, sample_incident["type"]) is True

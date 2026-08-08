@@ -42,11 +42,28 @@ def _handle_signal(_sig, _frame):
 
 
 def _cooldown_ok(incident_type: str | None) -> bool:
-    recent = db.recent_incidents(minutes=POST_COOLDOWN_MINUTES)
-    return not any(
-        r["posted"] and r["incident_type"] == incident_type
-        for r in recent
-    )
+    return not db.posted_within(POST_COOLDOWN_MINUTES, incident_type)
+
+
+def _handle_post_failure(incident_id: int, exc: Exception) -> None:
+    """Decide whether a failed post may be retried, and close it out if not.
+
+    Retrying a post Facebook may already have accepted is what published the
+    same incident two and three times: /feed has no idempotency key, so a read
+    timeout after delivery is indistinguishable from never sending. Unless we
+    know nothing was created, close the incident rather than retry it — a
+    missed scanner post is cheaper than a duplicate one.
+    """
+    # PostFailed carries the verdict; for anything else a bare ConnectionError
+    # is the one case we can be sure never reached the far end.
+    retryable = getattr(exc, "retryable", isinstance(exc, requests.ConnectionError))
+    if retryable:
+        log.warning("Post failed for incident #%s (%s) — will retry", incident_id, exc)
+        return
+    sentinel = "uncertain" if getattr(exc, "maybe_delivered", True) else "rejected"
+    log.warning("Post failed for incident #%s (%s) — recording '%s', not retrying",
+                incident_id, exc, sentinel)
+    db.mark_posted(incident_id, sentinel)
 
 
 def _flush_unposted() -> None:
@@ -70,8 +87,8 @@ def _flush_unposted() -> None:
             }
             try:
                 post_id = post.post_incident(incident)
-            except requests.RequestException:
-                log.warning("Post backend failed flushing incident #%d — will retry later", row["id"])
+            except requests.RequestException as exc:
+                _handle_post_failure(row["id"], exc)
                 return
             db.mark_posted(row["id"], post_id)
             return  # one post per flush cycle — drains at ~1/min
@@ -147,8 +164,8 @@ def main():
             try:
                 post_id = post.post_incident(incident)
                 db.mark_posted(incident_id, post_id)
-            except requests.RequestException:
-                log.warning("Post backend failed for incident #%s — left unposted, will retry", incident_id)
+            except requests.RequestException as exc:
+                _handle_post_failure(incident_id, exc)
         else:
             log.info("Cooldown active — saved but not posted.")
 

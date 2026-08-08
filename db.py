@@ -61,6 +61,7 @@ def init_db():
         """)
         _add_column_if_missing(conn, "incidents", "lat", "REAL")
         _add_column_if_missing(conn, "incidents", "lon", "REAL")
+        _add_column_if_missing(conn, "incidents", "posted_at", "TEXT")
 
 
 def _add_column_if_missing(conn, table: str, column: str, coltype: str) -> None:
@@ -116,12 +117,35 @@ def save_incident(incident: dict) -> int:
 
 
 def mark_posted(incident_id: int, post_id: str = ""):
-    """Mark an incident as posted and store the post ID."""
+    """Mark an incident as posted and store the post ID.
+
+    posted_at is stamped by SQLite rather than Python so it matches the format
+    datetime('now') produces — posted_within compares the two as strings.
+    """
     with get_conn() as conn:
         conn.execute(
-            "UPDATE incidents SET posted = 1, post_id = ? WHERE id = ?",
+            "UPDATE incidents SET posted = 1, post_id = ?, posted_at = datetime('now') "
+            "WHERE id = ?",
             (post_id, incident_id),
         )
+
+
+def posted_within(minutes: int, incident_type: str | None) -> bool:
+    """True if an incident of this type was actually posted in the last N minutes.
+
+    Keyed on posted_at rather than created_at. The cooldown used to filter
+    recent_incidents() by created_at, which silently did nothing whenever the
+    unposted queue drained a backlog: every held row was created well outside
+    the window, so nothing matched and same-type incidents posted back to back.
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM incidents "
+            "WHERE posted = 1 AND posted_at IS NOT NULL AND incident_type IS ? "
+            "AND posted_at > datetime('now', ? || ' minutes') LIMIT 1",
+            (incident_type, f"-{minutes}"),
+        ).fetchone()
+    return row is not None
 
 
 def unposted_incidents() -> list:

@@ -1,5 +1,6 @@
 import json
 import pytest
+import requests
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -134,8 +135,7 @@ def test_post_facebook_success(incident, monkeypatch):
     monkeypatch.setattr(post, "FB_PAGE_ID", "123456789")
     monkeypatch.setattr(post, "FB_PAGE_ACCESS_TOKEN", "EAAtest")
 
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status.return_value = None
+    mock_resp = MagicMock(status_code=200)
     mock_resp.json.return_value = {"id": "123456789_987"}
 
     with patch("post.requests.post", return_value=mock_resp) as mock_post:
@@ -156,27 +156,53 @@ def test_post_facebook_missing_credentials(incident, monkeypatch):
     assert result == ""
 
 
-def test_post_facebook_network_error_raises(incident, monkeypatch):
+@pytest.fixture
+def fb(monkeypatch):
     monkeypatch.setattr(post, "POST_BACKEND", "facebook")
     monkeypatch.setattr(post, "FB_PAGE_ID", "123456789")
     monkeypatch.setattr(post, "FB_PAGE_ACCESS_TOKEN", "EAAtest")
 
-    with patch("post.requests.post", side_effect=ConnectionError("Network error")):
-        with pytest.raises(ConnectionError):
+
+def test_post_facebook_connection_error_is_retryable(incident, fb):
+    """Never reached Facebook — nothing was created, so a retry is safe."""
+    with patch("post.requests.post", side_effect=requests.ConnectionError("no route")):
+        with pytest.raises(post.PostFailed) as exc_info:
             post.post_incident(incident)
+    assert exc_info.value.retryable is True
+    assert exc_info.value.maybe_delivered is False
 
 
-def test_post_facebook_http_error_raises(incident, monkeypatch):
-    monkeypatch.setattr(post, "POST_BACKEND", "facebook")
-    monkeypatch.setattr(post, "FB_PAGE_ID", "123456789")
-    monkeypatch.setattr(post, "FB_PAGE_ACCESS_TOKEN", "EAAtest")
+def test_post_facebook_timeout_is_not_retryable(incident, fb):
+    """A timeout may mean Facebook already published it — retrying duplicates."""
+    with patch("post.requests.post", side_effect=requests.Timeout("slow")):
+        with pytest.raises(post.PostFailed) as exc_info:
+            post.post_incident(incident)
+    assert exc_info.value.retryable is False
+    assert exc_info.value.maybe_delivered is True
 
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status.side_effect = Exception("HTTP 400")
 
+def test_post_facebook_server_error_is_not_retryable(incident, fb):
+    mock_resp = MagicMock(status_code=503, text="upstream boom")
     with patch("post.requests.post", return_value=mock_resp):
-        with pytest.raises(Exception, match="HTTP 400"):
+        with pytest.raises(post.PostFailed) as exc_info:
             post.post_incident(incident)
+    assert exc_info.value.retryable is False
+    assert exc_info.value.maybe_delivered is True
+
+
+def test_post_facebook_rejection_is_permanent(incident, fb):
+    """A 4xx created nothing, but the same content will be rejected again."""
+    mock_resp = MagicMock(status_code=400, text='{"error":"bad token"}')
+    with patch("post.requests.post", return_value=mock_resp):
+        with pytest.raises(post.PostFailed) as exc_info:
+            post.post_incident(incident)
+    assert exc_info.value.retryable is False
+    assert exc_info.value.maybe_delivered is False
+
+
+def test_post_failed_is_a_request_exception():
+    """Existing `except requests.RequestException` call sites must still catch it."""
+    assert issubclass(post.PostFailed, requests.RequestException)
 
 
 # ── print backend ─────────────────────────────────────────────────────────────

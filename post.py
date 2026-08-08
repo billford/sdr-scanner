@@ -23,6 +23,24 @@ log = logging.getLogger(__name__)
 POST_BACKEND = os.getenv("POST_BACKEND", "queue")
 
 
+class PostFailed(requests.RequestException):
+    """A post attempt failed.
+
+    Subclasses RequestException so existing callers keep catching it.
+
+    maybe_delivered — the request reached Facebook and the failure came after,
+        so it may already have created the post. The Graph API's /feed edge has
+        no idempotency key, which means a retry can't be deduplicated and would
+        publish a second copy.
+    retryable — we know nothing was created, so trying again later is safe.
+    """
+
+    def __init__(self, message: str, *, maybe_delivered: bool, retryable: bool):
+        super().__init__(message)
+        self.maybe_delivered = maybe_delivered
+        self.retryable = retryable
+
+
 def post_incident(incident: dict) -> str:
     """Post incident; returns post_id string (or empty on queue/text/print)."""
     backend = POST_BACKEND.lower()
@@ -52,13 +70,36 @@ def _post_facebook(incident: dict) -> str:
             data={"message": message, "access_token": FB_PAGE_ACCESS_TOKEN},
             timeout=15,
         )
-        resp.raise_for_status()
-        post_id = resp.json().get("id", "")
-        log.info("Posted to Facebook (%s): %s", post_id, message[:80])
-        return post_id
+    except requests.ConnectionError as exc:
+        # Never reached Facebook, so nothing was created — safe to try again.
+        log.error("Facebook post failed to connect: %s", exc)
+        raise PostFailed(str(exc), maybe_delivered=False, retryable=True) from exc
+    except requests.Timeout as exc:
+        # The request went out; we just never saw the reply. Facebook has very
+        # likely created the post already, and retrying this is what published
+        # the same incident two and three times over.
+        log.error("Facebook post timed out (may have been delivered): %s", exc)
+        raise PostFailed(str(exc), maybe_delivered=True, retryable=False) from exc
     except requests.RequestException as exc:
         log.error("Facebook post failed: %s", exc)
-        raise
+        raise PostFailed(str(exc), maybe_delivered=True, retryable=False) from exc
+
+    if resp.status_code >= 500:
+        # Facebook may have accepted the write before failing to respond.
+        log.error("Facebook post got server error %s", resp.status_code)
+        raise PostFailed(f"server error {resp.status_code}",
+                         maybe_delivered=True, retryable=False)
+    if resp.status_code >= 400:
+        # Rejected outright — nothing created, but the same content will be
+        # rejected again, so there is no point retrying it either.
+        body = resp.text[:200]
+        log.error("Facebook rejected post (%s): %s", resp.status_code, body)
+        raise PostFailed(f"rejected {resp.status_code}: {body}",
+                         maybe_delivered=False, retryable=False)
+
+    post_id = resp.json().get("id", "")
+    log.info("Posted to Facebook (%s): %s", post_id, message[:80])
+    return post_id
 
 
 def _post_text(incident: dict) -> str:
