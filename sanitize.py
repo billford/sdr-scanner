@@ -74,9 +74,16 @@ _PATTERN = re.compile(
 
 
 def _mask(word: str) -> str:
-    """k*ll — keep the first and last character, star everything between."""
+    """k*ll — keep the first and last character, star everything between.
+
+    Short words get a single star instead of a run of them: starring every
+    interior letter of a four-letter word can spell something worse than the
+    word being hidden — "shot" became "s**t" on a live post.
+    """
     if len(word) < 3:
         return word
+    if len(word) <= 4:
+        return word[0] + "*" + word[2:]
     return word[0] + "*" * (len(word) - 2) + word[-1]
 
 
