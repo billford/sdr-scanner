@@ -21,7 +21,7 @@ You are writing brief, factual posts for a local community scanner page \
 covering {community_desc}.
 
 Given this draft incident summary and the original dispatch transcript, produce \
-two things.
+three things.
 
 1. A clean, concise post.
 Format: [HH:MM] [Incident type] — [Location] — [1–2 sentence description]
@@ -36,6 +36,20 @@ Only write NONE if nothing more specific than the general listening area is \
 mentioned, or the only "location" given is an internal dispatch code/zone with \
 no public meaning.
 
+3. A publish verdict for Facebook.
+Facebook's automated moderation judges meaning, not vocabulary — a post gets \
+flagged for describing self-harm even when it contains no obvious word. Answer \
+NO when a reasonable moderator would flag this post. In particular answer NO for:
+- a suicide attempt, threat, or self-harm of any kind, however obliquely phrased \
+("attempting to jump in front of buses", "threatening to jump", "person in \
+crisis" who is a danger to themselves)
+- graphic injury or death described in detail
+- sexual assault described in detail
+- anything identifying a specific private individual in a medical or mental \
+health crisis
+Answer YES for ordinary incidents: fires, crashes, thefts, alarms, routine \
+medical calls, disturbances.
+
 Rules for the post:
 - Factual and neutral, like a local news brief
 - Never include individual names
@@ -45,10 +59,14 @@ Rules for the post:
 
 Respond in exactly this format and nothing else:
 POST: <formatted post>
-GEO: <geocoding-ready location, or NONE>"""
+GEO: <geocoding-ready location, or NONE>
+PUBLISH: YES or NO
+REASON: <short reason when PUBLISH is NO, otherwise NONE>"""
 
 _POST_LINE = re.compile(r"^POST:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _GEO_LINE = re.compile(r"^GEO:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
+_PUBLISH_LINE = re.compile(r"^PUBLISH:\s*(YES|NO)\b", re.IGNORECASE | re.MULTILINE)
+_REASON_LINE = re.compile(r"^REASON:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 
 _CLIENT: Optional[anthropic.Anthropic] = None
 
@@ -95,6 +113,15 @@ def polish(incident: dict) -> dict:
             geo = geo_match.group(1).strip()
             if geo.upper() != "NONE":
                 incident["geo_location"] = geo
+
+        # Left absent (not True) when the model didn't answer, so callers can
+        # tell "judged safe" apart from "never judged" and fall back to rules.
+        publish_match = _PUBLISH_LINE.search(response_text)
+        if publish_match:
+            incident["publishable"] = publish_match.group(1).upper() == "YES"
+            reason_match = _REASON_LINE.search(response_text)
+            if reason_match and reason_match.group(1).strip().upper() != "NONE":
+                incident["publish_note"] = reason_match.group(1).strip()
 
         log.info("Polished: %s", incident["summary"][:120])
     except Exception as exc:  # pylint: disable=broad-exception-caught

@@ -19,6 +19,7 @@ import transcribe
 import classify
 import summarize
 import geocode
+import moderate
 import post
 import dashboard
 from config import POST_COOLDOWN_MINUTES, POST_MAX_AGE_HOURS, BROADCASTIFY_FEED_URLS
@@ -160,7 +161,13 @@ def main():
             log.info("Duplicate incident in DB.")
             continue
 
-        if _cooldown_ok(incident.get("type")):
+        withheld = moderate.block_reason(incident)
+        if withheld:
+            # Stored and shown on the dashboard, just never sent to Facebook.
+            # Closed out rather than left queued so the flush doesn't post it later.
+            log.info("Withholding incident #%s from Facebook: %s", incident_id, withheld)
+            db.mark_posted(incident_id, "withheld")
+        elif _cooldown_ok(incident.get("type")):
             try:
                 post_id = post.post_incident(incident)
                 db.mark_posted(incident_id, post_id)
