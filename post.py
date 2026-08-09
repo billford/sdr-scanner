@@ -16,6 +16,7 @@ import requests
 
 from config import FB_PAGE_ID, FB_PAGE_ACCESS_TOKEN  # module-level so tests can patch
 from config import QUEUE_FILE, TEXT_OUTPUT_FILE  # module-level so tests can patch
+from moderate import apply_footer
 from sanitize import soften
 
 log = logging.getLogger(__name__)
@@ -63,7 +64,8 @@ def _post_facebook(incident: dict) -> str:
         return ""
 
     url = f"https://graph.facebook.com/v21.0/{FB_PAGE_ID}/feed"
-    message = soften(incident["summary"])
+    # Footer after masking, so the support number and wording stay intact.
+    message = apply_footer(soften(incident["summary"]), incident)
     try:
         resp = requests.post(
             url,

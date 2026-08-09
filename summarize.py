@@ -36,19 +36,32 @@ Only write NONE if nothing more specific than the general listening area is \
 mentioned, or the only "location" given is an internal dispatch code/zone with \
 no public meaning.
 
-3. A publish verdict for Facebook.
-Facebook's automated moderation judges meaning, not vocabulary — a post gets \
-flagged for describing self-harm even when it contains no obvious word. Answer \
-NO when a reasonable moderator would flag this post. In particular answer NO for:
-- a suicide attempt, threat, or self-harm of any kind, however obliquely phrased \
-("attempting to jump in front of buses", "threatening to jump", "person in \
-crisis" who is a danger to themselves)
-- graphic injury or death described in detail
-- sexual assault described in detail
-- anything identifying a specific private individual in a medical or mental \
-health crisis
-Answer YES for ordinary incidents: fires, crashes, thefts, alarms, routine \
-medical calls, disturbances.
+3. A crisis flag.
+Answer YES when the incident involves self-harm, a suicide attempt or threat, or \
+a person in crisis who is a danger to themselves — however obliquely the \
+transcript puts it ("attempting to jump in front of buses", "threatening to \
+jump", "wellness check, party is 10-96 and has a weapon on themselves"). Answer \
+NO for everything else, including ordinary medical, psychiatric transport and \
+welfare-check calls where no self-harm is indicated.
+
+When CRISIS is YES, write the post above following safe-messaging guidance:
+- never describe the method
+- keep the location general — a street or neighborhood, never a house number, \
+apartment number or intersection
+- omit age, sex, clothing and any other identifying detail
+- state only that responders assisted someone, and the outcome if known
+- neutral and brief; no speculation about motive, no "committed"
+- do NOT use the words "suicide", "suicidal", "crisis", "self-harm" or "mental \
+health" anywhere in the post, including the incident type. Write the type as \
+"Welfare Check" or "Medical Response" and describe it as officers or EMS \
+assisting a person.
+A safe example: "[18:27] Welfare Check — Downtown Cleveland — Officers and EMS \
+responded to assist a person near Rockwell Avenue. The person was taken for \
+evaluation."
+
+4. A publish verdict, for the rare case where no safe version is possible — \
+graphic death or injury in detail, or sexual assault in detail. Nearly always \
+YES; a crisis incident is handled by rewriting it, not by refusing it.
 
 Rules for the post:
 - Factual and neutral, like a local news brief
@@ -60,12 +73,14 @@ Rules for the post:
 Respond in exactly this format and nothing else:
 POST: <formatted post>
 GEO: <geocoding-ready location, or NONE>
+CRISIS: YES or NO
 PUBLISH: YES or NO
 REASON: <short reason when PUBLISH is NO, otherwise NONE>"""
 
 _POST_LINE = re.compile(r"^POST:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _GEO_LINE = re.compile(r"^GEO:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 _PUBLISH_LINE = re.compile(r"^PUBLISH:\s*(YES|NO)\b", re.IGNORECASE | re.MULTILINE)
+_CRISIS_LINE = re.compile(r"^CRISIS:\s*(YES|NO)\b", re.IGNORECASE | re.MULTILINE)
 _REASON_LINE = re.compile(r"^REASON:\s*(.+)$", re.IGNORECASE | re.MULTILINE)
 
 _CLIENT: Optional[anthropic.Anthropic] = None
@@ -116,6 +131,11 @@ def polish(incident: dict) -> dict:
 
         # Left absent (not True) when the model didn't answer, so callers can
         # tell "judged safe" apart from "never judged" and fall back to rules.
+        # Internal metadata only — the word never appears in a published post.
+        crisis_match = _CRISIS_LINE.search(response_text)
+        if crisis_match:
+            incident["crisis"] = crisis_match.group(1).upper() == "YES"
+
         publish_match = _PUBLISH_LINE.search(response_text)
         if publish_match:
             incident["publishable"] = publish_match.group(1).upper() == "YES"
